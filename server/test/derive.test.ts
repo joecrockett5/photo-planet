@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -18,7 +19,21 @@ function has(cmd: string, arg = '-version') {
   }
 }
 const hasFfmpeg = has('ffmpeg');
-const hasHeif = has('heif-convert', '--version');
+/** heif-convert can be installed without an HEVC decoder plugin, so try it for real. */
+function canDecodeHeic() {
+  if (!has('heif-convert', '--version')) return false;
+  const out = path.join(tmpdir(), `pp-heic-probe-${process.pid}.jpg`);
+  try {
+    execFileSync('heif-convert', [path.join(fixtures, 'photo-tokyo.heic'), out], { stdio: 'ignore' });
+    return existsSync(out);
+  } catch {
+    return false;
+  } finally {
+    rmSync(out, { force: true });
+  }
+}
+const hasHeif = canDecodeHeic();
+if (!hasHeif) console.warn('heif-convert cannot decode HEIC here: skipping the HEIC conversion test');
 
 function probeCodec(file: string): string {
   return execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', file], {

@@ -39,7 +39,8 @@ The server shells out to `ffmpeg`/`ffprobe` (video metadata, posters, transcodes
 and `heif-convert` (HEIC → JPEG). They're installed in the Docker image. For
 local dev without them, the code should degrade gracefully (log a warning, mark
 the derived file as missing) rather than crash. In a fresh Linux sandbox:
-`apt-get install -y ffmpeg libheif-examples`.
+`apt-get install -y ffmpeg libheif-examples` (on Ubuntu 24.04+/Debian trixie+ also
+`libheif-plugin-libde265`, or heif-convert can't decode HEIC).
 
 ## Conventions
 
