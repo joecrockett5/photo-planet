@@ -6,12 +6,21 @@ export interface ExecResult {
 }
 
 /** Run a binary (no shell). Rejects with stderr in the message on failure. */
-export function run(cmd: string, args: string[], opts: { timeoutMs?: number; maxBuffer?: number } = {}) {
+export function run(
+  cmd: string,
+  args: string[],
+  opts: { timeoutMs?: number; maxBuffer?: number; signal?: AbortSignal } = {},
+) {
   return new Promise<ExecResult>((resolve, reject) => {
     execFile(
       cmd,
       args,
-      { timeout: opts.timeoutMs ?? 0, maxBuffer: opts.maxBuffer ?? 16 * 1024 * 1024, encoding: 'utf8' },
+      {
+        timeout: opts.timeoutMs ?? 0,
+        maxBuffer: opts.maxBuffer ?? 16 * 1024 * 1024,
+        encoding: 'utf8',
+        signal: opts.signal,
+      },
       (err, stdout, stderr) => {
         if (err) {
           const tail = stderr.trim().split('\n').slice(-3).join(' | ');

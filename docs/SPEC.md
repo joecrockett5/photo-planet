@@ -181,7 +181,7 @@ Docker, and with `npm run check` passing.
 - [x] **M2 Metadata:** EXIF GPS/date for photos, ffprobe for videos, unit
       tests against fixture files (generate small fixtures with known GPS; keep
       them tiny, under ~100KB each, in `server/test/fixtures`).
-- [ ] **M3 Derived files:** thumbnails, HEIC → JPEG, video poster + transcode
+- [x] **M3 Derived files:** thumbnails, HEIC → JPEG, video poster + transcode
       when needed, background job queue, status field.
 - [ ] **M4 Starfield:** pixel-art sky, full-screen, crisp at any size/DPR.
 - [ ] **M5 Planet:** software-rendered pixel planet with real geography,
