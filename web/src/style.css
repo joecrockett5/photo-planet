@@ -500,3 +500,41 @@ body.locked .viewer {
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------ M9: polish */
+
+.empty-hint {
+  position: fixed;
+  left: var(--gap);
+  right: var(--gap);
+  bottom: calc(var(--gap) + 52px + env(safe-area-inset-bottom));
+  text-align: center;
+  color: var(--c-starMid);
+  pointer-events: none;
+}
+
+.viewer-stage {
+  position: relative;
+}
+.viewer-stage.loading::before {
+  content: '...';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--c-starMid);
+  animation: blink 1s steps(2) infinite;
+  pointer-events: none;
+}
+.viewer-stage.loading .viewer-media {
+  opacity: 0;
+}
+@keyframes blink {
+  50% {
+    color: var(--c-starDim);
+  }
+}
+
+.title {
+  padding-top: env(safe-area-inset-top);
+}

@@ -54,6 +54,7 @@ export class PlanetControl {
   }
 
   startDrag(): void {
+    this.touched = true;
     this.dragging = true;
     this.flight = null;
     this.vLat = this.vLon = 0;
@@ -80,8 +81,19 @@ export class PlanetControl {
   }
 
   zoomBy(factor: number): void {
+    this.touched = true;
     this.zoom = clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
     this.sinceTouch = 0;
+  }
+
+  /** Keyboard nudge: a short spin in a direction (degrees/second impulse). */
+  nudge(dLat: number, dLon: number): void {
+    this.touched = true;
+    this.flight = null;
+    this.sinceTouch = 0;
+    this.idleSpeed = 0;
+    this.vLat = clamp(this.vLat + dLat, -120, 120);
+    this.vLon = clamp(this.vLon + dLon, -200, 200);
   }
 
   setZoom(z: number): void {
@@ -106,6 +118,12 @@ export class PlanetControl {
       duration,
     };
   }
+
+  /** True until someone drags, zooms or flies somewhere. */
+  get untouched(): boolean {
+    return !this.touched;
+  }
+  private touched = false;
 
   get moving(): boolean {
     return this.dragging || this.flight !== null || Math.abs(this.vLon) + Math.abs(this.vLat) > 0.05 || this.idleSpeed !== 0;

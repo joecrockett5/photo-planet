@@ -18,6 +18,9 @@ export class Scene {
   private stars = new Starfield();
   private planet = new PlanetRenderer();
   private lastFrame = 0;
+  /** 0 → 1 once the map has loaded: the planet dithers in. */
+  private reveal = 0;
+  private mapReady = false;
   private lastDraw = 0;
   private dirty = true;
   /** Shift of the planet centre (art px), e.g. to make room for a panel. */
@@ -38,6 +41,7 @@ export class Scene {
     loadBiomes()
       .then((map) => {
         this.planet.setMap(map);
+        this.mapReady = true;
         this.dirty = true;
       })
       .catch((err) => console.error(err));
@@ -87,6 +91,11 @@ export class Scene {
     const reduced = motion.reduced;
 
     let changed = this.control.update(dt, reduced);
+    if (this.mapReady && this.reveal < 1) {
+      // stepped dissolve: 8 steps over ~0.6s
+      this.reveal = reduced ? 1 : Math.min(1, this.reveal + dt / 0.6);
+      changed = true;
+    }
     for (const k of ['x', 'y'] as const) {
       const d = this.offsetTarget[k] - this.offset[k];
       if (Math.abs(d) > 0.05) {
@@ -111,8 +120,9 @@ export class Scene {
     this.view = this.computeView();
     const { buf, width: w, height: h } = this.px;
     this.stars.draw(buf, t, this.view.lon, this.view.lat, !reduced);
-    this.planet.draw(buf, w, h, this.view, reduced ? 0 : t * CLOUD_SPEED);
-    this.pins.draw(buf, w, h, this.view, t, !reduced);
+    const reveal = Math.ceil(this.reveal * 8) / 8;
+    if (reveal > 0) this.planet.draw(buf, w, h, this.view, reduced ? 0 : t * CLOUD_SPEED, reveal);
+    if (reveal >= 1) this.pins.draw(buf, w, h, this.view, t, !reduced);
     this.onFrame?.(this.view);
     this.px.present();
   }

@@ -120,6 +120,13 @@ export class Viewer {
       media = img;
     }
     this.stage.replaceChildren(media);
+    // quiet "..." until the full-size file arrives
+    this.stage.classList.add('loading');
+    const done = () => this.stage.classList.remove('loading');
+    if (media instanceof HTMLImageElement) {
+      if (media.complete) done();
+      else media.addEventListener('load', done, { once: true }), media.addEventListener('error', done, { once: true });
+    } else done(); // videos show their poster straight away (iOS won't preload)
     this.renderMeta();
     // preload neighbours
     for (const d of [1, -1]) {

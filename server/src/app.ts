@@ -77,10 +77,10 @@ export function buildApp(overrides: Partial<Config> = {}) {
     const sendIndex = async (_req: unknown, reply: import('fastify').FastifyReply) =>
       reply.type('text/html; charset=utf-8').header('cache-control', 'no-cache').send(index);
     app.get('/', sendIndex);
+    app.get('/index.html', sendIndex);
     app.register(fastifyStatic, {
       root: config.webDist,
       decorateReply: false,
-      wildcard: false,
       index: false,
       allowedPath: (p) => p !== '/index.html',
       // hashed asset names: cache forever

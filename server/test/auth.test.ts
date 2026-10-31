@@ -84,6 +84,7 @@ describe('personalisation', () => {
       const res = await app.inject({ method: 'GET', url: '/' });
       expect(res.statusCode).toBe(200);
       expect(res.body).toContain('<title>Sam &#38; Alex &#60;3</title>');
+      expect((await app.inject({ method: 'GET', url: '/index.html' })).body).toContain('Sam &#38; Alex');
       expect((await app.inject({ method: 'GET', url: '/api/config' })).json().title).toBe('Sam & Alex <3');
     } finally {
       const { rmSync } = await import('node:fs');

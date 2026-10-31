@@ -27,7 +27,13 @@ const hoverLabel = h('div.pin-label', { hidden: true });
 ui.append(title, hoverLabel);
 
 const unplacedButton = h('button.text-button.unplaced', { hidden: true, onclick: () => openTray() });
-ui.append(unplacedButton);
+const coarse = matchMedia('(pointer: coarse)').matches;
+const emptyHint = h(
+  'p.empty-hint',
+  { hidden: true },
+  coarse ? 'A quiet little planet. Tap + to add your first photo' : 'A quiet little planet. Drop a photo here, or press +',
+);
+ui.append(unplacedButton, emptyHint);
 
 const gallery = new Gallery(ui);
 const viewer = new Viewer(document.body);
@@ -44,6 +50,7 @@ store.subscribe((items) => {
   unplacedButton.hidden = unplaced === 0;
   unplacedButton.textContent = `${unplaced} unplaced`;
   if (placing.item && !store.get(placing.item.id)) placing.cancel();
+  emptyHint.hidden = items.length > 0;
   gallery.update(items);
   viewer.update(items);
   scene.invalidate();
@@ -221,9 +228,24 @@ uploader.onBatchDone = (added) => {
 
 addEventListener('keydown', (e) => {
   if (viewer.handleKey(e)) return e.preventDefault();
-  if (e.key !== 'Escape') return;
-  if (placing.active) placing.cancel();
-  else if (gallery.isOpen) gallery.close();
+  if (e.key === 'Escape') {
+    if (placing.active) placing.cancel();
+    else if (gallery.isOpen) gallery.close();
+    return;
+  }
+  // spin and zoom the planet from the keyboard when nothing else wants the keys
+  if (login.isOpen || (e.target instanceof HTMLElement && e.target.closest('input, .gallery'))) return;
+  const turn: Record<string, [number, number]> = {
+    ArrowLeft: [0, -60],
+    ArrowRight: [0, 60],
+    ArrowUp: [40, 0],
+    ArrowDown: [-40, 0],
+  };
+  if (turn[e.key]) {
+    scene.control.nudge(...turn[e.key]!);
+    e.preventDefault();
+  } else if (e.key === '+' || e.key === '=') scene.control.zoomBy(1.25);
+  else if (e.key === '-' || e.key === '_') scene.control.zoomBy(0.8);
 });
 
 void motion; // imported for its side effect of tracking prefers-reduced-motion
@@ -252,6 +274,9 @@ async function start() {
   title.textContent = cfg.title;
   if (cfg.authRequired && !cfg.authenticated) await requireLogin();
   else await store.refresh();
+  // open on the most recent memory
+  const latest = [...store.placed].sort((a, b) => ((a.takenAt ?? a.uploadedAt) < (b.takenAt ?? b.uploadedAt) ? 1 : -1))[0];
+  if (latest && scene.control.untouched) scene.control.flyTo(latest.lat, latest.lon, scene.control.zoom, 1.6);
 }
 start().catch((err) => {
   console.error(err);

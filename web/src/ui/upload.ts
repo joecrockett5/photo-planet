@@ -18,6 +18,7 @@ export class Uploader {
   private failed = 0;
   private busy = false;
   private added: MediaItem[] = [];
+  private lastError = '';
   private statusTimer: number | undefined;
   onBatchDone: ((added: MediaItem[]) => void) | null = null;
 
@@ -60,15 +61,22 @@ export class Uploader {
         if (!result.duplicate) this.added.push(result.item);
       } else {
         this.failed++;
+        this.lastError = result.error ?? 'upload failed';
         console.warn(`upload of ${result.name} failed: ${result.error}`);
       }
     }
     this.busy = false;
     this.bar.hidden = true;
     const added = this.added;
-    this.status.textContent = this.failed ? `${this.failed} failed` : `${this.total - this.failed} added`;
-    if (added.length !== this.total - this.failed) this.status.textContent += ` (${this.total - this.failed - added.length} already here)`;
-    this.statusTimer = window.setTimeout(() => (this.status.textContent = ''), 4000);
+    const dupes = this.total - this.failed - added.length;
+    this.status.textContent = [
+      added.length && `${added.length} added`,
+      dupes && `${dupes} already here`,
+      this.failed && `${this.failed} failed (${this.lastError})`,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    this.statusTimer = window.setTimeout(() => (this.status.textContent = ''), this.failed ? 8000 : 4000);
     this.total = this.done = this.failed = 0;
     this.added = [];
     this.onBatchDone?.(added);

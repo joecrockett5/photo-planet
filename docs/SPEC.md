@@ -150,15 +150,17 @@ server/   Fastify + TypeScript, SQLite (better-sqlite3), sharp, exifr, ffmpeg/ff
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | liveness (exists already) |
-| GET | `/api/config` | `{ title, authRequired }` |
+| GET | `/api/config` | `{ title, authRequired, authenticated, maxUploadMb }` |
 | POST | `/api/login` | `{ password }` → sets cookie |
+| POST | `/api/logout` | clears the cookie |
 | GET | `/api/media` | all items (id, kind, lat, lon, takenAt, thumbUrl, status…) |
-| POST | `/api/media` | multipart upload, one or more files |
+| GET | `/api/media/:id` | one item |
+| POST | `/api/media` | multipart upload, one or more files → `{ results: [{ name, item?, duplicate?, error? }] }` |
 | PATCH | `/api/media/:id` | update `{ lat, lon }` |
 | DELETE | `/api/media/:id` | delete item and files |
 | GET | `/media/:id/thumb` | thumbnail |
 | GET | `/media/:id/display` | browser-viewable version (or original) |
-| GET | `/media/:id/original` | original download |
+| GET | `/media/:id/original` | original (`?download` for an attachment) |
 
 ### Configuration (env vars)
 
@@ -190,9 +192,51 @@ Docker, and with `npm run check` passing.
       centre and open gallery, full-screen viewer with video playback.
 - [x] **M7 Unplaced tray and editing:** manual placement, delete.
 - [x] **M8 Auth and personalisation:** `APP_PASSWORD`, login screen, `PLANET_TITLE`.
-- [ ] **M9 Polish:** mobile/touch pass, reduced motion, empty state (a lonely
+- [x] **M9 Polish:** mobile/touch pass, reduced motion, empty state (a lonely
       planet with a hint to add the first photo), loading states, favicon (a tiny
       pixel planet), README deploy docs checked end to end.
+
+## Implementation notes and decisions
+
+Things the build settled that the sections above leave open, or where it
+deliberately differs. Revisit any of them freely.
+
+- **Text pixel size.** Icons, borders, pins and the canvas all use one art-pixel
+  scale (3–4 CSS px, an integer number of *device* pixels per art pixel at any
+  DPR). UI *text* (Silkscreen) is drawn at half that scale, still whole device
+  pixels so it stays crisp, because at full scale the "tiny" title would be
+  ~20px tall.
+- **Biomes are painted, not measured.** Land/ocean, coastlines and country
+  borders are real Natural Earth 1:50m data. Biomes (desert, forest, ice, rock)
+  are hand-placed regions with noisy edges plus latitude belts, the Andes
+  traced along South America's Pacific coast, and shallow water from distance
+  to land. There is no elevation or climate data. The map is a committed
+  2048×1024 RLE file made by `web/scripts/make-earth.ts`.
+- **Lighting** is a fixed key light from the upper left (not the real sun), so
+  the dithered terminator stays still while the globe turns.
+- **Place names** are offline and country-level only ("Portugal",
+  "Portugal & Spain"), from a bundled country raster. No city names yet.
+- **Duplicates.** Uploads are deduplicated by SHA-256; uploading the same
+  file twice returns the existing item.
+- **Display versions** are made only when needed: HEIC → JPEG; MOV with
+  H.264(+AAC) is *remuxed* to MP4 (no quality loss, fast); everything else
+  not universally playable (HEVC, ProRes…) is transcoded to H.264 MP4, capped
+  at 1920px, with HDR (HLG/PQ) tone-mapped via zscale when available. Large
+  JPEGs are served as originals (no resized "display" copy).
+- **Dates** are stored as the wall-clock time where the photo was taken
+  (with its offset when the file records one) and shown by that calendar day,
+  so a photo never shifts a day because of the server's timezone.
+- **Gallery** dims the planet (a flat CSS brightness step, no overlay) and
+  slides it beside the panel; tapping the planet away from pins closes it,
+  tapping another pin switches to it.
+- **Placing** an unplaced item is done from the viewer (*place*), then one tap
+  on the planet; an undo toast follows. The same flow re-places (*move*) an
+  item; *unplace* sends it back to the tray.
+- **Opening the app** turns the planet to the most recent memory.
+- **Sessions** last 400 days (the browser maximum); the cookie value
+  fingerprints `APP_PASSWORD`, so changing the password logs everyone out.
+  Login attempts are limited to 10 per 10 minutes per IP.
+- **Keyboard:** arrow keys spin, `+`/`-` zoom, Esc closes things, ←/→ in the viewer.
 
 ## Non-goals (v1)
 

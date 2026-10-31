@@ -7,7 +7,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit && vitest run",
-    "earth": "tsx scripts/make-earth.ts"
+    "earth": "tsx scripts/make-earth.ts",
+    "icons": "tsx scripts/make-icons.ts"
   },
   "devDependencies": {
     "topojson-client": "^3.1.0",

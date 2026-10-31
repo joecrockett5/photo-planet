@@ -64,7 +64,10 @@ export class PlanetRenderer {
   /**
    * @param cloudLon cloud drift in degrees (null hides clouds)
    */
-  draw(buf: Uint32Array, w: number, h: number, view: View, cloudLon: number | null): void {
+  /**
+   * @param reveal 0..1: ordered-dither dissolve-in while the map loads
+   */
+  draw(buf: Uint32Array, w: number, h: number, view: View, cloudLon: number | null, reveal = 1): void {
     const map = this.map;
     const { cx, cy, r } = view;
     const sp = Math.sin(view.lat * DEG);
@@ -91,6 +94,7 @@ export class PlanetRenderer {
         const nx = (x + 0.5 - cx) * invR;
         const r2 = nx * nx + ny * ny;
         const d = bayer(x, y);
+        if (d >= reveal) continue;
         if (r2 > 1) {
           // thin atmosphere rim, lit side only
           if (r2 <= atmo2) {
