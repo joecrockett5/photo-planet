@@ -428,3 +428,75 @@ body.placing-mode .title {
 .toast .text-button {
   color: var(--c-pinLight);
 }
+
+/* ------------------------------------------------------------------ M8: login */
+
+body.locked .ui,
+body.locked .viewer {
+  display: none;
+}
+.login {
+  position: fixed;
+  left: var(--gap);
+  right: var(--gap);
+  bottom: max(6vh, calc(var(--gap) + env(safe-area-inset-bottom)));
+  width: fit-content;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  z-index: 8;
+}
+.login-title {
+  color: var(--c-starMid);
+}
+.login-row {
+  display: flex;
+  align-items: center;
+  background: var(--c-space);
+  border: var(--px) solid var(--c-starDim);
+}
+.login-row:focus-within {
+  border-color: var(--c-starMid);
+}
+.login-input {
+  font: inherit;
+  color: var(--c-starBright);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  width: 14em;
+  max-width: 55vw;
+  padding: 0 calc(var(--tpx) * 5);
+  height: 44px;
+  /* iOS zooms into inputs under 16px; keep it pixel-aligned at 16+ */
+  font-size: max(16px, calc(var(--tpx) * 8));
+}
+.login-input::placeholder {
+  color: var(--c-starDim);
+}
+.login-error {
+  min-height: 1.5em;
+  color: var(--c-pin);
+}
+.login.shake {
+  animation: shake 0.3s steps(6);
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(calc(var(--px) * -2));
+  }
+  75% {
+    transform: translateX(calc(var(--px) * 2));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login.shake {
+    animation: none;
+  }
+}

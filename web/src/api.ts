@@ -37,7 +37,11 @@ export class HttpError extends Error {
   }
 }
 
+/** Called when the session has expired (any 401 outside of login itself). */
+export const auth = { onUnauthorized: () => {} };
+
 async function json<T>(res: Response): Promise<T> {
+  if (res.status === 401 && !res.url.endsWith('/api/login')) auth.onUnauthorized();
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new HttpError(res.status, body.error ?? res.statusText);
@@ -80,6 +84,7 @@ export function uploadFile(file: File, onProgress: (fraction: number) => void): 
     xhr.responseType = 'json';
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
     xhr.onload = () => {
+      if (xhr.status === 401) auth.onUnauthorized();
       const body = xhr.response as { results?: UploadResult[]; error?: string } | null;
       const result = body?.results?.[0];
       if (result) resolve(result);

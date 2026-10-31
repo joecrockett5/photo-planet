@@ -189,7 +189,7 @@ Docker, and with `npm run check` passing.
 - [x] **M6 Pins and gallery:** pins from `/api/media`, clustering, click to
       centre and open gallery, full-screen viewer with video playback.
 - [x] **M7 Unplaced tray and editing:** manual placement, delete.
-- [ ] **M8 Auth and personalisation:** `APP_PASSWORD`, login screen, `PLANET_TITLE`.
+- [x] **M8 Auth and personalisation:** `APP_PASSWORD`, login screen, `PLANET_TITLE`.
 - [ ] **M9 Polish:** mobile/touch pass, reduced motion, empty state (a lonely
       planet with a hint to add the first photo), loading states, favicon (a tiny
       pixel planet), README deploy docs checked end to end.

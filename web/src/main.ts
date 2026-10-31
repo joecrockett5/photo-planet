@@ -1,6 +1,6 @@
 import '@fontsource/silkscreen/400.css';
 import './style.css';
-import { api, type MediaItem } from './api';
+import { api, auth, type MediaItem } from './api';
 import { describeItems } from './format';
 import { motion } from './motion';
 import { unproject, type Cluster } from './planet/geo';
@@ -10,6 +10,7 @@ import { Scene } from './scene';
 import { store } from './store';
 import { h } from './ui/dom';
 import { Gallery } from './ui/gallery';
+import { Login } from './ui/login';
 import { Placing } from './ui/placing';
 import { Toast } from './ui/toast';
 import { placeName } from './ui/place';
@@ -33,6 +34,7 @@ const viewer = new Viewer(document.body);
 const uploader = new Uploader(ui);
 const placing = new Placing(ui);
 const toast = new Toast(ui);
+const login = new Login(document.body);
 
 // ---------------------------------------------------------------- data → scene
 
@@ -228,12 +230,32 @@ void motion; // imported for its side effect of tracking prefers-reduced-motion
 
 // ---------------------------------------------------------------- start
 
-async function start() {
-  const cfg = await api.config();
-  document.title = cfg.title;
-  title.textContent = cfg.title;
+let appTitle = document.title;
+
+async function requireLogin() {
+  if (login.isOpen) return;
+  viewer.close();
+  gallery.close();
+  placing.cancel();
+  // lift the planet to make room for the form underneath
+  scene.setOffset(0, -scene.px.height * 0.1);
+  await login.show(appTitle);
+  scene.setOffset(0, 0);
   await store.refresh();
 }
-start().catch((err) => console.error(err));
+auth.onUnauthorized = () => void requireLogin();
+
+async function start() {
+  const cfg = await api.config();
+  appTitle = cfg.title;
+  document.title = cfg.title;
+  title.textContent = cfg.title;
+  if (cfg.authRequired && !cfg.authenticated) await requireLogin();
+  else await store.refresh();
+}
+start().catch((err) => {
+  console.error(err);
+  toast.show("Couldn't reach the planet. Is the server running?", undefined, 60_000);
+});
 
 Object.assign(window, { scene, store });
