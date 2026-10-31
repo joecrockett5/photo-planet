@@ -1,8 +1,44 @@
+:root {
+  --px: 4px; /* CSS px per art pixel; set from JS */
+  color-scheme: dark;
+}
+
 html,
 body {
   margin: 0;
   height: 100%;
-  background: #0b0b1a;
-  color: #e8e8ff;
-  font-family: monospace;
+  background: var(--c-space, #0d0b1e);
+  color: var(--c-starBright, #eef0ff);
+  font-family: 'Silkscreen', monospace;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#sky {
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  touch-action: none;
+}
+
+#upload,
+#status {
+  position: fixed;
+  z-index: 1;
+  font: inherit;
+  font-size: calc(var(--px) * 8);
+  color: inherit;
+}
+#upload {
+  right: calc(var(--px) * 4);
+  bottom: calc(var(--px) * 4);
+  background: none;
+  border: none;
+}
+#status {
+  left: calc(var(--px) * 4);
+  bottom: calc(var(--px) * 4);
 }

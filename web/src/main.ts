@@ -1,6 +1,14 @@
-// M1: bare-bones upload. The sky and planet arrive in M4/M5.
+import '@fontsource/silkscreen/400.css';
+import './style.css';
 import { api, uploadFile } from './api';
+import { applyPaletteToCss } from './render/palette';
+import { Scene } from './scene';
 
+applyPaletteToCss();
+const scene = new Scene(document.querySelector<HTMLCanvasElement>('#sky')!);
+Object.assign(window, { scene });
+
+// Bare-bones upload until the real UI lands.
 const status = document.createElement('div');
 status.id = 'status';
 const button = document.createElement('button');
@@ -17,7 +25,6 @@ async function refresh() {
   const items = await api.list();
   status.textContent = `${items.length} items`;
 }
-
 button.onclick = () => input.click();
 input.onchange = async () => {
   const files = [...(input.files ?? [])];
@@ -28,7 +35,6 @@ input.onchange = async () => {
   input.value = '';
   await refresh();
 };
-
 refresh().catch(() => {});
 api
   .config()
