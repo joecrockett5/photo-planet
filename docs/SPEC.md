@@ -178,7 +178,7 @@ Docker, and with `npm run check` passing.
 
 - [x] **M1 Storage and upload:** DB + migrations, upload endpoint, store
       originals, list endpoint. Bare-bones upload button in the UI.
-- [ ] **M2 Metadata:** EXIF GPS/date for photos, ffprobe for videos, unit
+- [x] **M2 Metadata:** EXIF GPS/date for photos, ffprobe for videos, unit
       tests against fixture files (generate small fixtures with known GPS; keep
       them tiny, under ~100KB each, in `server/test/fixtures`).
 - [ ] **M3 Derived files:** thumbnails, HEIC → JPEG, video poster + transcode

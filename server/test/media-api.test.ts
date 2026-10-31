@@ -1,4 +1,6 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { multipart, testApp, type TestApp } from './helpers.js';
@@ -37,6 +39,17 @@ describe('media api', () => {
     const original = await app.inject({ method: 'GET', url: `/media/${result.item.id}/original` });
     expect(original.statusCode).toBe(200);
     expect(original.rawPayload.equals(png)).toBe(true);
+  });
+
+  it('reads the location and date of an upload', async () => {
+    const data = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'photo-lisbon.jpg'));
+    const res = await upload([{ name: 'IMG_0001.JPG', data, type: 'image/jpeg' }]);
+    expect(res.json().results[0].item).toMatchObject({
+      kind: 'photo',
+      locationSource: 'exif',
+      takenAt: '2023-06-14T18:32:05+01:00',
+    });
+    expect(res.json().results[0].item.lat).toBeCloseTo(38.7223, 4);
   });
 
   it('accepts several files at once and dedupes identical content', async () => {
