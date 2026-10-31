@@ -26,6 +26,7 @@ COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server/package.json ./server/
 COPY --from=build /app/server/dist ./server/dist
+COPY --from=build /app/server/migrations ./server/migrations
 COPY --from=build /app/web/dist ./web/dist
 RUN mkdir -p /data && chown node:node /data
 USER node

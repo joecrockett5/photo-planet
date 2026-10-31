@@ -1,45 +1,36 @@
-// Placeholder: a static pixel starfield and a flat pixel disc, just to prove the
-// low-res canvas + pixelated upscale pipeline. Replace with the real starfield
-// and planet renderer (see docs/SPEC.md, milestones M4 and M5).
+// M1: bare-bones upload. The sky and planet arrive in M4/M5.
+import { api, uploadFile } from './api';
 
-const PIXEL = 4; // CSS px per art pixel
+const status = document.createElement('div');
+status.id = 'status';
+const button = document.createElement('button');
+button.textContent = '+';
+button.id = 'upload';
+const input = document.createElement('input');
+input.type = 'file';
+input.multiple = true;
+input.accept = 'image/*,video/*,.heic,.heif,.mov';
+input.hidden = true;
+document.body.append(button, input, status);
 
-const canvas = document.querySelector<HTMLCanvasElement>('#sky')!;
-const ctx = canvas.getContext('2d')!;
-
-function draw() {
-  const w = Math.ceil(innerWidth / PIXEL);
-  const h = Math.ceil(innerHeight / PIXEL);
-  canvas.width = w;
-  canvas.height = h;
-
-  ctx.fillStyle = '#0b0b1a';
-  ctx.fillRect(0, 0, w, h);
-
-  let seed = 42;
-  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  ctx.fillStyle = '#e8e8ff';
-  for (let i = 0; i < (w * h) / 60; i++) {
-    ctx.fillRect(Math.floor(rand() * w), Math.floor(rand() * h), 1, 1);
-  }
-
-  const r = Math.floor(Math.min(w, h) * 0.3);
-  const cx = Math.floor(w / 2);
-  const cy = Math.floor(h / 2);
-  for (let y = -r; y <= r; y++) {
-    for (let x = -r; x <= r; x++) {
-      if (x * x + y * y <= r * r) {
-        ctx.fillStyle = x + y < 0 ? '#3a7bd5' : '#24508f';
-        ctx.fillRect(cx + x, cy + y, 1, 1);
-      }
-    }
-  }
+async function refresh() {
+  const items = await api.list();
+  status.textContent = `${items.length} items`;
 }
 
-addEventListener('resize', draw);
-draw();
+button.onclick = () => input.click();
+input.onchange = async () => {
+  const files = [...(input.files ?? [])];
+  for (const [i, f] of files.entries()) {
+    status.textContent = `${i + 1}/${files.length}`;
+    await uploadFile(f, () => {});
+  }
+  input.value = '';
+  await refresh();
+};
 
-fetch('/api/config')
-  .then((res) => res.json())
-  .then((cfg: { title: string }) => (document.title = cfg.title))
+refresh().catch(() => {});
+api
+  .config()
+  .then((cfg) => (document.title = cfg.title))
   .catch(() => {});

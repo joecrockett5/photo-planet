@@ -176,7 +176,7 @@ server/   Fastify + TypeScript, SQLite (better-sqlite3), sharp, exifr, ffmpeg/ff
 Work through these in order. Each one should leave `main` working, building in
 Docker, and with `npm run check` passing.
 
-- [ ] **M1 Storage and upload:** DB + migrations, upload endpoint, store
+- [x] **M1 Storage and upload:** DB + migrations, upload endpoint, store
       originals, list endpoint. Bare-bones upload button in the UI.
 - [ ] **M2 Metadata:** EXIF GPS/date for photos, ffprobe for videos, unit
       tests against fixture files (generate small fixtures with known GPS; keep
