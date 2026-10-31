@@ -41,6 +41,8 @@ export interface MediaItem {
   height: number | null;
   duration: number | null;
   status: Status;
+  /** Why processing failed, if it did. */
+  error: string | null;
   thumbUrl: string | null;
   displayUrl: string;
   originalUrl: string;
@@ -64,6 +66,7 @@ export function toItem(row: MediaRow): MediaItem {
     height: row.height,
     duration: row.duration,
     status: row.status,
+    error: row.status === 'failed' ? row.error : null,
     thumbUrl: row.thumb_path ? `/media/${row.id}/thumb${v}` : null,
     displayUrl: `/media/${row.id}/display${v}`,
     originalUrl: `/media/${row.id}/original`,

@@ -16,6 +16,7 @@ export interface MediaItem {
   height: number | null;
   duration: number | null;
   status: Status;
+  error: string | null;
   thumbUrl: string | null;
   displayUrl: string;
   originalUrl: string;

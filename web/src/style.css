@@ -319,6 +319,14 @@ body.dropping::after {
   text-align: center;
   max-width: 30em;
 }
+.viewer-error {
+  margin-top: calc(var(--tpx) * 4);
+  color: var(--c-starDim);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  user-select: text;
+  -webkit-user-select: text;
+}
 .viewer-missing a {
   color: var(--c-starBright);
 }

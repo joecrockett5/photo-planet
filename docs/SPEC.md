@@ -44,9 +44,13 @@ chrome, lots of space, the planet as the centrepiece.
 - Do the processing in-process, one job at a time, so a large video doesn't block
   the HTTP server (a simple in-memory queue is fine; mark item status
   `processing` → `ready` / `failed`).
-- Note: sharp's prebuilt libvips does **not** decode HEIC. Use `heif-convert`
-  (Debian package `libheif-examples`) or ffmpeg to turn HEIC into JPEG, then sharp
-  for resizing.
+- Note: sharp's prebuilt libvips does **not** decode HEIC. HEIC → JPEG tries,
+  in order: `heif-dec`/`heif-convert` (native libheif CLI), sharp (in case its
+  libvips has HEVC), then libheif compiled to WebAssembly (`heic-decode`) in a
+  worker thread, which needs no system packages. Then sharp for resizing.
+- Items whose processing failed are retried once at every start-up (a newer
+  version or newly installed tool may handle them), and the API exposes the
+  failure reason as `error`.
 
 ### 4. The planet (the centrepiece)
 - A sphere rendered at **low internal resolution** (e.g. 128 to 200px across) and
@@ -236,6 +240,11 @@ deliberately differs. Revisit any of them freely.
 - **Sessions** last 400 days (the browser maximum); the cookie value
   fingerprints `APP_PASSWORD`, so changing the password logs everyone out.
   Login attempts are limited to 10 per 10 minutes per IP.
+- **HEIC without system tools:** the WebAssembly libheif fallback (LGPL-3.0,
+  like the libheif the Docker image ships) makes HEIC work on any host, e.g.
+  `npm run dev` on a Mac. Native tools are still preferred: faster, less memory.
+- **Reduced motion** keeps drags fully live (direct manipulation) but drops the
+  inertial glide after letting go, along with idle spin and twinkles.
 - **Keyboard:** arrow keys spin, `+`/`-` zoom, Esc closes things, ←/→ in the viewer.
 
 ## Non-goals (v1)

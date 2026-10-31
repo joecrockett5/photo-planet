@@ -99,22 +99,26 @@ photos.example.com {
 ## How it handles media
 
 - Thumbnails are 400px WebP. HEIC photos get a JPEG copy for browsers
-  (via `heif-convert`). Videos get a poster frame; MOV/HEVC videos get an
+  (via libheif's `heif-dec`/`heif-convert`, or a bundled WebAssembly libheif). Videos get a poster frame; MOV/HEVC videos get an
   H.264 MP4 copy so they play in every browser (iPhone HDR video is
   tone-mapped). MP4/WebM that already play are served as-is, with seeking.
 - Processing runs in the background, one file at a time; the pin appears as
   soon as the upload finishes and the thumbnail follows a moment later.
 - Uploading the exact same file twice just points at the existing one.
+- If a file couldn't be processed, the viewer says why, and it's retried
+  automatically the next time the app starts (e.g. after an update).
 - Place names are worked out offline to country level from bundled Natural
   Earth data. Nothing is sent to any third-party service, and the page loads
   no external fonts, scripts or maps.
 
 ## Development
 
-Requires Node 22+. For video and HEIC support you also need `ffmpeg` and
-`heif-convert` (Debian/Ubuntu: `apt-get install ffmpeg libheif-examples`, plus
-`libheif-plugin-libde265` on Ubuntu 24.04+/Debian trixie+). Without them the
-app still runs; those files just won't get thumbnails.
+Requires Node 22+. Video support needs `ffmpeg` (Debian/Ubuntu:
+`apt-get install ffmpeg`; macOS: `brew install ffmpeg`); without it videos
+upload and get pinned but have no thumbnail. HEIC works out of the box via a
+bundled WebAssembly decoder; installing libheif's `heif-dec`/`heif-convert`
+(`libheif-examples`, plus `libheif-plugin-libde265` on Ubuntu 24.04+/Debian
+trixie+; `brew install libheif` on macOS) makes it faster.
 
 ```bash
 npm install

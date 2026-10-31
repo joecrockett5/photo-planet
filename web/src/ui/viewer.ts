@@ -101,9 +101,7 @@ export class Viewer {
     this.index = index;
     const item = this.items[index]!;
     let media: HTMLElement;
-    if (item.status === 'failed' && !item.thumbUrl) {
-      media = h('p.viewer-missing', {}, "This file can't be shown here. ", h('a', { href: `${item.originalUrl}?download` }, 'Download it'));
-    } else if (item.kind === 'video') {
+    if (item.kind === 'video') {
       media = h('video.viewer-media', {
         src: item.displayUrl,
         poster: item.thumbUrl ?? undefined,
@@ -112,10 +110,12 @@ export class Viewer {
         preload: 'metadata',
       });
     } else {
+      // Even when processing failed, the original may still display: Safari
+      // shows HEIC natively. Fall back to the thumbnail, then to a message.
       const img = h('img.viewer-media', { src: item.status === 'processing' && item.thumbUrl ? item.thumbUrl : item.displayUrl, alt: item.name });
-      // fall back to the thumbnail if the browser can't decode the file
       img.onerror = () => {
         if (item.thumbUrl && img.src !== new URL(item.thumbUrl, location.href).href) img.src = item.thumbUrl;
+        else if (this.current === item) this.showMissing(item);
       };
       media = img;
     }
@@ -133,6 +133,18 @@ export class Viewer {
       const n = this.items[(index + d + this.items.length) % this.items.length];
       if (n && n.kind === 'photo' && n !== item) new Image().src = n.displayUrl;
     }
+  }
+
+  private showMissing(item: MediaItem) {
+    this.stage.classList.remove('loading');
+    this.stage.replaceChildren(
+      h(
+        'div.viewer-missing',
+        {},
+        h('p', {}, "This file can't be shown in this browser. ", h('a', { href: `${item.originalUrl}?download` }, 'Download it')),
+        item.error ? h('p.viewer-error', {}, item.error) : null,
+      ),
+    );
   }
 
   private renderMeta() {

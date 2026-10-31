@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -19,21 +18,6 @@ function has(cmd: string, arg = '-version') {
   }
 }
 const hasFfmpeg = has('ffmpeg');
-/** heif-convert can be installed without an HEVC decoder plugin, so try it for real. */
-function canDecodeHeic() {
-  if (!has('heif-convert', '--version')) return false;
-  const out = path.join(tmpdir(), `pp-heic-probe-${process.pid}.jpg`);
-  try {
-    execFileSync('heif-convert', [path.join(fixtures, 'photo-tokyo.heic'), out], { stdio: 'ignore' });
-    return existsSync(out);
-  } catch {
-    return false;
-  } finally {
-    rmSync(out, { force: true });
-  }
-}
-const hasHeif = canDecodeHeic();
-if (!hasHeif) console.warn('heif-convert cannot decode HEIC here: skipping the HEIC conversion test');
 
 function probeCodec(file: string): string {
   return execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', file], {
@@ -85,7 +69,8 @@ describe('derived files', () => {
     expect([meta.width, meta.height]).toEqual([267, 400]);
   });
 
-  it.skipIf(!hasHeif)('converts HEIC to a JPEG display version', async () => {
+  // Works with or without heif-convert/heif-dec: the WebAssembly decoder is the fallback.
+  it('converts HEIC to a JPEG display version', async () => {
     const row = await uploadFixture('photo-tokyo.heic');
     expect(row.status).toBe('ready');
     expect(row.display_path).toMatch(/display\.jpg$/);
@@ -128,6 +113,19 @@ describe('derived files', () => {
     const row = app.ctx.repo.get(res.json().results[0].item.id)!;
     expect(row.status).toBe('failed');
     expect(row.error).toBeTruthy();
+    const item = (await app.inject({ method: 'GET', url: `/api/media/${row.id}` })).json().item;
+    expect(item).toMatchObject({ status: 'failed', error: row.error, thumbUrl: null });
+  });
+
+  it('retries failed items on start-up', async () => {
+    const row = await uploadFixture('photo-tokyo.heic');
+    app.ctx.repo.update(row.id, { status: 'failed', error: 'heif-convert is not installed', thumb_path: null, display_path: null });
+    app.ctx.queue.resume();
+    expect(app.ctx.repo.get(row.id)!.status).toBe('processing');
+    await app.ctx.queue.idle();
+    expect(app.ctx.repo.get(row.id)).toMatchObject({ status: 'ready', error: null, thumb_path: expect.any(String) });
+    const item = (await app.inject({ method: 'GET', url: `/api/media/${row.id}` })).json().item;
+    expect(item.error).toBeNull();
   });
 
   it('resumes items left processing by a restart', async () => {
