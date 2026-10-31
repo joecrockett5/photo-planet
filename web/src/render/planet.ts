@@ -1,6 +1,6 @@
 import { BIOME } from '../planet/earth-format';
 import type { EarthMap } from '../planet/earth';
-import { DEG, type View } from '../planet/geo';
+import { DEG, fastAtan2, type View } from '../planet/geo';
 import { bayer, fbm } from './noise';
 import { C } from './palette';
 
@@ -111,8 +111,9 @@ export class PlanetRenderer {
         const z1 = -ny * sp + nz * cp;
         const wx = nx * cl + z1 * sl;
         const wz = -nx * sl + z1 * cl;
-        const lat = Math.asin(wy > 1 ? 1 : wy < -1 ? -1 : wy); // radians
-        const lon = Math.atan2(wx, wz); // radians, -π..π
+        // asin(wy) as atan2(wy, |horizontal|): the horizontal length is free here
+        const lat = fastAtan2(wy, Math.sqrt(wx * wx + wz * wz)); // radians
+        const lon = fastAtan2(wx, wz); // radians, -π..π
         const u = (lon + Math.PI) / TWO_PI; // 0..1
         const v = 0.5 - lat / Math.PI; // 0..1
 

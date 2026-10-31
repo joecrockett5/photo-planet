@@ -22,6 +22,7 @@ export class Scene {
   private reveal = 0;
   private mapReady = false;
   private lastDraw = 0;
+  private drawnVersion = -1;
   private dirty = true;
   /** Shift of the planet centre (art px), e.g. to make room for a panel. */
   private offset = { x: 0, y: 0 };
@@ -49,7 +50,7 @@ export class Scene {
     attachInput(this.px, {
       dragStart: () => this.control.startDrag(),
       drag: (dx, dy, now) => this.control.dragBy(dx, dy, this.view.r, now),
-      dragEnd: (now) => this.control.endDrag(now),
+      dragEnd: (now) => this.control.endDrag(now, motion.reduced),
       zoom: (f) => this.control.zoomBy(f),
       tap: (x, y) => this.onTap?.(x, y),
       hover: (x, y) => this.onHover?.(x, y),
@@ -90,7 +91,10 @@ export class Scene {
     this.lastFrame = now;
     const reduced = motion.reduced;
 
-    let changed = this.control.update(dt, reduced);
+    this.control.update(dt, reduced);
+    // Redraw for any orientation/zoom change, including ones made by input
+    // handlers since the last frame (drags), not just by update().
+    let changed = this.control.version !== this.drawnVersion;
     if (this.mapReady && this.reveal < 1) {
       // stepped dissolve: 8 steps over ~0.6s
       this.reveal = reduced ? 1 : Math.min(1, this.reveal + dt / 0.6);
@@ -107,14 +111,15 @@ export class Scene {
       }
     }
 
-    const busy = this.control.moving;
-    // Pixel art moves in steps: 30fps is plenty for idle drift and twinkles;
-    // go full rate only while being handled.
-    const interval = busy && !reduced ? 1000 / 60 - 2 : 1000 / 30 - 2;
+    // Pixel art moves in steps: 30fps is plenty for idle drift and twinkles.
+    // While being handled (dragged, flown, gliding) go full rate, even with
+    // reduced motion: that's direct manipulation, not decoration.
+    const interval = this.control.handled ? 1000 / 60 - 2 : 1000 / 30 - 2;
     if (!this.dirty && !changed && (reduced || now - this.lastDraw < 1000 / 30 - 2)) return;
     if (!this.dirty && now - this.lastDraw < interval) return;
     this.lastDraw = now;
     this.dirty = false;
+    this.drawnVersion = this.control.version;
 
     const t = now / 1000;
     this.view = this.computeView();

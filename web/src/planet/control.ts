@@ -37,6 +37,11 @@ export class PlanetControl {
   private samples: { t: number; dLat: number; dLon: number }[] = [];
   /** When false (reduced motion, or a panel is open), no idle spin. */
   idleEnabled = true;
+  /**
+   * Bumped on every change to lat/lon/zoom, however it happened (input
+   * handlers run between frames), so the renderer knows to redraw.
+   */
+  version = 0;
 
   /** Drag by a screen delta (art px) on a disc of radius r (art px). */
   dragBy(dx: number, dy: number, r: number, now: number): void {
@@ -49,6 +54,7 @@ export class PlanetControl {
     const dLat = dy * k;
     this.lon = wrapLon(this.lon + dLon);
     this.lat = clamp(this.lat + dLat, -MAX_LAT, MAX_LAT);
+    this.version++;
     this.samples.push({ t: now, dLat, dLon });
     while (this.samples.length && now - this.samples[0]!.t > 100) this.samples.shift();
   }
@@ -63,8 +69,13 @@ export class PlanetControl {
     this.sinceTouch = 0;
   }
 
-  endDrag(now: number): void {
+  endDrag(now: number, reducedMotion = false): void {
     this.dragging = false;
+    if (reducedMotion) {
+      // no glide after letting go
+      this.samples = [];
+      return;
+    }
     const recent = this.samples.filter((s) => now - s.t < 100);
     if (recent.length >= 2) {
       const span = Math.max(16, now - recent[0]!.t) / 1000;
@@ -84,6 +95,7 @@ export class PlanetControl {
     this.touched = true;
     this.zoom = clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
     this.sinceTouch = 0;
+    this.version++;
   }
 
   /** Keyboard nudge: a short spin in a direction (degrees/second impulse). */
@@ -99,6 +111,7 @@ export class PlanetControl {
   setZoom(z: number): void {
     this.zoom = clamp(z, MIN_ZOOM, MAX_ZOOM);
     this.sinceTouch = 0;
+    this.version++;
   }
 
   /** Smoothly rotate so lat/lon faces the viewer (optionally zooming). */
@@ -125,8 +138,9 @@ export class PlanetControl {
   }
   private touched = false;
 
-  get moving(): boolean {
-    return this.dragging || this.flight !== null || Math.abs(this.vLon) + Math.abs(this.vLat) > 0.05 || this.idleSpeed !== 0;
+  /** Dragged, flying, or gliding after a drag (not just idle spin). */
+  get handled(): boolean {
+    return this.dragging || this.flight !== null || Math.abs(this.vLon) + Math.abs(this.vLat) > 0.05;
   }
 
   /** Advance by dt seconds. Returns true if anything changed. */
@@ -156,6 +170,8 @@ export class PlanetControl {
       this.lat = clamp(this.lat + this.vLat * dt, -MAX_LAT, MAX_LAT);
       if (Math.abs(this.lat) >= MAX_LAT) this.vLat = 0;
     }
-    return this.lat + this.lon * 1000 + this.zoom * 1e6 !== before;
+    const changed = this.lat + this.lon * 1000 + this.zoom * 1e6 !== before;
+    if (changed) this.version++;
+    return changed;
   }
 }
