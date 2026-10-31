@@ -94,6 +94,24 @@ export function lonDelta(a: number, b: number): number {
   return wrapLon(b - a);
 }
 
+/**
+ * Follows a wrapped longitude (-180..180) and reports a continuous one that
+ * never jumps: crossing the antimeridian keeps counting (179 → 181, not -179).
+ * Used for the starfield's parallax, which would otherwise leap by 360° worth
+ * of offset every time the globe spins past ±180°.
+ */
+export class UnwrappedLon {
+  private last: number | null = null;
+  value = 0;
+
+  update(lon: number): number {
+    if (this.last === null) this.value = lon;
+    else this.value += lonDelta(this.last, lon);
+    this.last = lon;
+    return this.value;
+  }
+}
+
 export interface Located {
   lat: number;
   lon: number;

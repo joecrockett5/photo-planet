@@ -2,7 +2,7 @@ import { attachInput } from './input';
 import { motion } from './motion';
 import { loadBiomes } from './planet/earth';
 import { PlanetControl } from './planet/control';
-import type { View } from './planet/geo';
+import { UnwrappedLon, type View } from './planet/geo';
 import { PixelCanvas } from './render/pixels';
 import { PinLayer } from './render/pins';
 import { PlanetRenderer } from './render/planet';
@@ -23,6 +23,8 @@ export class Scene {
   private mapReady = false;
   private lastDraw = 0;
   private drawnVersion = -1;
+  /** Continuous longitude for star parallax (no jump at ±180°). */
+  private skyLon = new UnwrappedLon();
   private dirty = true;
   /** Shift of the planet centre (art px), e.g. to make room for a panel. */
   private offset = { x: 0, y: 0 };
@@ -124,7 +126,7 @@ export class Scene {
     const t = now / 1000;
     this.view = this.computeView();
     const { buf, width: w, height: h } = this.px;
-    this.stars.draw(buf, t, this.view.lon, this.view.lat, !reduced);
+    this.stars.draw(buf, t, this.skyLon.update(this.view.lon), this.view.lat, !reduced);
     const reveal = Math.ceil(this.reveal * 8) / 8;
     if (reveal > 0) this.planet.draw(buf, w, h, this.view, reduced ? 0 : t * CLOUD_SPEED, reveal);
     if (reveal >= 1) this.pins.draw(buf, w, h, this.view, t, !reduced);
