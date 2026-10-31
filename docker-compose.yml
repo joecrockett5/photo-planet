@@ -1,0 +1,15 @@
+services:
+  photo-planet:
+    build: .
+    image: photo-planet
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8080}:3000"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - photo-planet-data:/data
+
+volumes:
+  photo-planet-data:
