@@ -107,8 +107,8 @@ photos.example.com {
 - Uploading the exact same file twice just points at the existing one.
 - If a file couldn't be processed, the viewer says why, and it's retried
   automatically the next time the app starts (e.g. after an update).
-- Place names are worked out offline to country level from bundled Natural
-  Earth data. Nothing is sent to any third-party service, and the page loads
+- Place names ("Osaka, Japan") are worked out offline from bundled GeoNames
+  and Natural Earth data. Nothing is sent to any third-party service, and the page loads
   no external fonts, scripts or maps.
 
 ## Development
@@ -131,12 +131,15 @@ Pass the same env vars to try the login and title locally, e.g.
 `APP_PASSWORD=stardust PLANET_TITLE="Our Planet" npm run dev`.
 
 The planet's geography is generated from the `world-atlas` package by
-`npm run earth -w web` and the icons by `npm run icons -w web`; the outputs are
-committed, so you only need these if you change them.
+`npm run earth -w web`, the icons by `npm run icons -w web`, and the place-name
+data by `npm run places -w server` (instructions at the top of
+`server/scripts/make-places.ts`); the outputs are committed, so you only need
+these if you change them.
 
 ## Credits
 
 Geography: [Natural Earth](https://www.naturalearthdata.com/) (public domain),
 via [world-atlas](https://github.com/topojson/world-atlas).
+Place names: [GeoNames](https://www.geonames.org/) (CC BY 4.0).
 Pixel font: [Silkscreen](https://kottke.org/plus/type/silkscreen/) by Jason
 Kottke (SIL Open Font License), via Fontsource.

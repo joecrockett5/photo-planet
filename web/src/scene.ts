@@ -50,7 +50,7 @@ export class Scene {
     attachInput(this.px, {
       dragStart: () => this.control.startDrag(),
       drag: (dx, dy, now) => this.control.dragBy(dx, dy, this.view.r, now),
-      dragEnd: (now) => this.control.endDrag(now, motion.reduced),
+      dragEnd: (now) => this.control.endDrag(now),
       zoom: (f) => this.control.zoomBy(f),
       tap: (x, y) => this.onTap?.(x, y),
       hover: (x, y) => this.onHover?.(x, y),

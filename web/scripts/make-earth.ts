@@ -4,8 +4,8 @@
  *   - earth-biomes.bin: a biome index per texel (ocean depth, beach, grass,
  *     forest, desert, rock/tundra, ice). Land/ocean is real data; biomes are
  *     hand-placed regions with noisy edges, which is plenty at pixel-art scale.
- *   - earth-countries.bin + countries.json: a country index per texel, for
- *     offline "where is this" labels.
+ * (Country rasterisation here only steers biomes, e.g. Greenland's ice. Place
+ * names come from the server: see server/scripts/make-places.ts.)
  * Run with `npm run earth -w web`. Outputs are committed.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -15,74 +15,12 @@ import { fileURLToPath } from 'node:url';
 import { feature } from 'topojson-client';
 import { fbm } from '../src/render/noise';
 import { BIOME, encodeRle } from '../src/planet/earth-format';
+import { fillPolygon, polygonsOf } from './raster';
 
 const require = createRequire(import.meta.url);
 const W = 2048;
 const H = 1024;
 const outDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/planet');
-
-type Ring = [number, number][];
-type Polygon = Ring[];
-
-function polygonsOf(geom: { type: string; coordinates: unknown }): Polygon[] {
-  if (geom.type === 'Polygon') return [geom.coordinates as Polygon];
-  if (geom.type === 'MultiPolygon') return geom.coordinates as Polygon[];
-  return [];
-}
-
-/**
- * Rings that cross the antimeridian (lon jumps by ~360) are unwrapped into a
- * continuous ring and filled three times, shifted by -360/0/+360. Rings that
- * run along a pole edge (Antarctica) are already closed in plain lon/lat.
- */
-function fillPolygon(grid: Uint8Array, poly: Polygon, value: number) {
-  const touchesPole = poly.some((ring) => ring.some(([, lat]) => Math.abs(lat) > 89.9));
-  const wraps = poly.some((ring) => ring.some(([lon], i) => i > 0 && Math.abs(lon - ring[i - 1]![0]) > 180));
-  if (!wraps || touchesPole) return fillPlanar(grid, poly, value);
-  const unwrapped = poly.map((ring) => {
-    const out: Ring = [];
-    let offset = 0;
-    ring.forEach(([lon, lat], i) => {
-      if (i > 0) {
-        const prev = ring[i - 1]![0];
-        if (lon - prev > 180) offset -= 360;
-        else if (prev - lon > 180) offset += 360;
-      }
-      out.push([lon + offset, lat]);
-    });
-    return out;
-  });
-  for (const shift of [-360, 0, 360]) fillPlanar(grid, unwrapped.map((r) => r.map(([x, y]) => [x + shift, y] as [number, number])), value);
-}
-
-/** Even-odd scanline fill of one polygon (outer ring + holes) at texel centres. */
-function fillPlanar(grid: Uint8Array, poly: Polygon, value: number) {
-  let minY = H;
-  let maxY = 0;
-  for (const ring of poly)
-    for (const [, lat] of ring) {
-      const y = (90 - lat) / 180 * H;
-      minY = Math.min(minY, Math.floor(y));
-      maxY = Math.max(maxY, Math.ceil(y));
-    }
-  for (let y = Math.max(0, minY); y <= Math.min(H - 1, maxY); y++) {
-    const lat = 90 - ((y + 0.5) / H) * 180;
-    const xs: number[] = [];
-    for (const ring of poly) {
-      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-        const [x1, y1] = ring[j]!;
-        const [x2, y2] = ring[i]!;
-        if (y1 > lat !== y2 > lat) xs.push(x1 + ((lat - y1) / (y2 - y1)) * (x2 - x1));
-      }
-    }
-    xs.sort((a, b) => a - b);
-    for (let k = 0; k + 1 < xs.length; k += 2) {
-      const a = Math.ceil(((xs[k]! + 180) / 360) * W - 0.5);
-      const b = Math.floor(((xs[k + 1]! + 180) / 360) * W - 0.5);
-      for (let x = Math.max(0, a); x <= Math.min(W - 1, b); x++) grid[y * W + x] = value;
-    }
-  }
-}
 
 /**
  * Approximate distance (in texels) to the nearest texel where `isSource`,
@@ -118,7 +56,7 @@ function distanceTo(isSource: (i: number) => boolean, max: number): Uint8Array {
 const land = new Uint8Array(W * H);
 const landTopo = JSON.parse(readFileSync(require.resolve('world-atlas/land-50m.json'), 'utf8'));
 for (const f of (feature(landTopo, landTopo.objects.land) as unknown as { features: { geometry: never }[] }).features)
-  for (const poly of polygonsOf(f.geometry)) fillPolygon(land, poly, 1);
+  for (const poly of polygonsOf(f.geometry)) fillPolygon(land, W, H, poly, 1);
 
 const countryTopo = JSON.parse(readFileSync(require.resolve('world-atlas/countries-50m.json'), 'utf8'));
 const countryFeatures = (
@@ -131,7 +69,7 @@ const countries = new Uint8Array(W * H);
 const names: string[] = [''];
 for (const f of countryFeatures) {
   names.push(f.properties.name);
-  for (const poly of polygonsOf(f.geometry)) fillPolygon(countries, poly, names.length - 1);
+  for (const poly of polygonsOf(f.geometry)) fillPolygon(countries, W, H, poly, names.length - 1);
 }
 
 // ---------------------------------------------------------------- biomes
@@ -243,11 +181,8 @@ for (let y = 0; y < H; y++) {
 // ---------------------------------------------------------------- write
 
 const biomeBin = encodeRle(biomes, W, H);
-const countryBin = encodeRle(countries, W, H);
 writeFileSync(path.join(outDir, 'earth-biomes.bin'), biomeBin);
-writeFileSync(path.join(outDir, 'earth-countries.bin'), countryBin);
-writeFileSync(path.join(outDir, 'countries.json'), JSON.stringify(names));
-console.log(`biomes ${(biomeBin.length / 1024).toFixed(0)}KB, countries ${(countryBin.length / 1024).toFixed(0)}KB`);
+console.log(`biomes ${(biomeBin.length / 1024).toFixed(0)}KB`);
 
 // Optional preview: PREVIEW=out.png (uses sharp from the server workspace).
 if (process.env.PREVIEW) {

@@ -1,10 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import type { AppContext } from '../context.js';
 import { ingest, UploadError } from '../media/ingest.js';
-import { toItem } from '../media/types.js';
+import { toItem as rowToItem, type MediaRow } from '../media/types.js';
 
 export function mediaRoutes(app: FastifyInstance, ctx: AppContext): void {
   const { repo, storage } = ctx;
+  const toItem = (row: MediaRow) => rowToItem(row, (lat, lon) => ctx.places().lookup(lat, lon));
 
   app.get('/api/media', async () => ({ items: repo.list().map(toItem) }));
 
@@ -16,7 +17,7 @@ export function mediaRoutes(app: FastifyInstance, ctx: AppContext): void {
 
   app.post('/api/media', async (req, reply) => {
     if (!req.isMultipart()) return reply.code(400).send({ error: 'expected multipart/form-data' });
-    const results: { name: string; item?: ReturnType<typeof toItem>; duplicate?: boolean; error?: string }[] = [];
+    const results: { name: string; item?: ReturnType<typeof rowToItem>; duplicate?: boolean; error?: string }[] = [];
     let worstStatus = 0;
     for await (const part of req.files()) {
       try {

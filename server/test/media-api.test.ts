@@ -50,6 +50,7 @@ describe('media api', () => {
       takenAt: '2023-06-14T18:32:05+01:00',
     });
     expect(res.json().results[0].item.lat).toBeCloseTo(38.7223, 4);
+    expect(res.json().results[0].item.place).toEqual({ city: 'Lisbon', country: 'Portugal' });
   });
 
   it('accepts several files at once and dedupes identical content', async () => {
@@ -84,14 +85,19 @@ describe('media api', () => {
 
   it('sets, validates and clears a location', async () => {
     const id = (await upload([{ name: 'a.png', data: await tinyPng() }])).json().results[0].item.id;
-    const set = await app.inject({ method: 'PATCH', url: `/api/media/${id}`, payload: { lat: 38.72, lon: -9.14 } });
-    expect(set.json().item).toMatchObject({ lat: 38.72, lon: -9.14, locationSource: 'manual' });
+    const set = await app.inject({ method: 'PATCH', url: `/api/media/${id}`, payload: { lat: 34.6873, lon: 135.5262 } });
+    expect(set.json().item).toMatchObject({
+      lat: 34.6873,
+      lon: 135.5262,
+      locationSource: 'manual',
+      place: { city: 'Osaka', country: 'Japan' },
+    });
 
     const bad = await app.inject({ method: 'PATCH', url: `/api/media/${id}`, payload: { lat: 120, lon: 0 } });
     expect(bad.statusCode).toBe(400);
 
     const cleared = await app.inject({ method: 'PATCH', url: `/api/media/${id}`, payload: { lat: null, lon: null } });
-    expect(cleared.json().item).toMatchObject({ lat: null, lon: null, locationSource: null });
+    expect(cleared.json().item).toMatchObject({ lat: null, lon: null, locationSource: null, place: null });
   });
 
   it('deletes an item and its files', async () => {

@@ -128,8 +128,9 @@ async function placeAt(x: number, y: number) {
   const before = { lat: item.lat, lon: item.lon };
   placing.cancel();
   try {
-    store.upsert(await api.setLocation(item.id, spot.lat, spot.lon));
-    const place = await placeName([spot]);
+    const placed = await api.setLocation(item.id, spot.lat, spot.lon);
+    store.upsert(placed);
+    const place = placeName([placed]);
     toast.show(place ? `Placed in ${place}` : 'Placed', {
       label: 'undo',
       run: () => void api.setLocation(item.id, before.lat, before.lon).then((i) => store.upsert(i)),
@@ -169,7 +170,6 @@ viewer.actionsFor = (item) => [
   { label: 'delete', icon: 'trash', run: remove, confirm: 'sure?', danger: true },
 ];
 
-let hoverToken = 0;
 scene.onHover = (x, y) => {
   if (placing.active) {
     scene.pins.ghost = x < 0 ? null : unproject(scene.view, x, y);
@@ -187,18 +187,15 @@ scene.onHover = (x, y) => {
 };
 
 function showHoverLabel(hit: PinHit | null) {
-  const token = ++hoverToken;
   if (!hit || gallery.isOpen) {
     hoverLabel.hidden = true;
     return;
   }
   const items: MediaItem[] = hit.cluster.items;
-  hoverLabel.textContent = describeItems(items);
+  const place = placeName(items, 'short');
+  hoverLabel.textContent = place ? `${place} · ${describeItems(items)}` : describeItems(items);
   hoverLabel.hidden = false;
   positionHoverLabel();
-  void placeName(items).then((place) => {
-    if (token === hoverToken && place) hoverLabel.textContent = `${place} · ${describeItems(items)}`;
-  });
 }
 
 function positionHoverLabel() {

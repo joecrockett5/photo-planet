@@ -15,7 +15,6 @@ export class Gallery {
   private grid = h('div.gallery-grid');
   private ids: string[] = [];
   private items: MediaItem[] = [];
-  private placeToken = 0;
   isOpen = false;
   onClose: (() => void) | null = null;
   onOpenItem: ((items: MediaItem[], index: number) => void) | null = null;
@@ -42,11 +41,7 @@ export class Gallery {
     this.live = false;
     this.fixedTitle = null;
     this.show(items);
-    const token = ++this.placeToken;
-    this.title.textContent = '';
-    void placeName(items).then((name) => {
-      if (token === this.placeToken) this.title.textContent = name || 'Somewhere';
-    });
+    this.title.textContent = placeName(items) || 'Somewhere';
   }
 
   /** The unplaced tray: everything without a location. */
@@ -54,7 +49,6 @@ export class Gallery {
     this.keep = (i) => i.lat === null;
     this.live = true;
     this.fixedTitle = 'Unplaced';
-    ++this.placeToken;
     this.title.textContent = this.fixedTitle;
     this.show(all.filter(this.keep));
   }
@@ -103,9 +97,12 @@ export class Gallery {
       const key = dayKey(item);
       groups.set(key, [...(groups.get(key) ?? []), item]);
     }
+    // When a pin covers several towns, say which town each day was in.
+    const manyTowns = !this.live && new Set(this.items.map((i) => i.place?.city ?? '')).size > 1;
     const frag = document.createDocumentFragment();
     for (const [day, dayItems] of groups) {
-      frag.append(h('h3.gallery-day', {}, formatDay(day)));
+      const town = manyTowns ? placeName(dayItems, 'short') : '';
+      frag.append(h('h3.gallery-day', {}, town ? `${formatDay(day)} · ${town}` : formatDay(day)));
       const row = h('div.gallery-thumbs');
       for (const item of dayItems) row.append(this.thumb(item));
       frag.append(row);

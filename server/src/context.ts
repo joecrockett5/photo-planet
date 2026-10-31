@@ -1,5 +1,6 @@
 import type { Config } from './config.js';
 import type { DB } from './db.js';
+import type { Places } from './geo/places.js';
 import type { Metadata } from './media/metadata.js';
 import type { JobQueue } from './media/queue.js';
 import type { MediaRepo } from './media/repo.js';
@@ -13,6 +14,8 @@ export interface AppContext {
   storage: Storage;
   repo: MediaRepo;
   queue: JobQueue;
+  /** Offline place names; loaded on first use (~300ms, ~35MB). */
+  places: () => Places;
   extractMetadata: (file: string, kind: Kind) => Promise<Metadata>;
   onIngested: (row: MediaRow) => void;
 }

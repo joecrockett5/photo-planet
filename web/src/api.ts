@@ -10,6 +10,8 @@ export interface MediaItem {
   lat: number | null;
   lon: number | null;
   locationSource: 'exif' | 'manual' | null;
+  /** Worked out by the server from lat/lon, offline. Null when unplaced. */
+  place: { city: string | null; country: string | null } | null;
   takenAt: string | null;
   uploadedAt: string;
   width: number | null;

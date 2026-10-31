@@ -8,6 +8,7 @@ import { config as envConfig, type Config } from './config.js';
 import { registerAuth } from './auth.js';
 import type { AppContext } from './context.js';
 import { openDb } from './db.js';
+import { Places } from './geo/places.js';
 import { extractMetadata } from './media/metadata.js';
 import { JobQueue } from './media/queue.js';
 import { MediaRepo } from './media/repo.js';
@@ -33,9 +34,17 @@ export function buildApp(overrides: Partial<Config> = {}) {
     repo,
     extractMetadata,
     queue,
+    places: (() => {
+      let loaded: Places | null = null;
+      return () => (loaded ??= Places.load());
+    })(),
     onIngested: (row) => queue.enqueue(row.id),
   };
-  app.addHook('onReady', async () => queue.resume());
+  app.addHook('onReady', async () => {
+    queue.resume();
+    // warm the place-name index so the first page load isn't the one waiting
+    if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) setImmediate(() => ctx.places());
+  });
   app.addHook('onClose', async () => {
     await queue.stop();
     db.close();

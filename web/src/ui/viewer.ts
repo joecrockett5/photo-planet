@@ -24,7 +24,6 @@ export class Viewer {
   private nextBtn: HTMLButtonElement;
   private items: MediaItem[] = [];
   private index = 0;
-  private token = 0;
   isOpen = false;
   actionsFor: (item: MediaItem) => ViewerAction[] = () => [];
 
@@ -153,11 +152,8 @@ export class Viewer {
     this.prevBtn.hidden = this.nextBtn.hidden = !multi;
     this.counter.textContent = multi ? `${this.index + 1}/${this.items.length}` : '';
     const date = formatDay(dayKey(item));
-    this.caption.textContent = date;
-    const token = ++this.token;
-    void placeName([item]).then((place) => {
-      if (token === this.token && place) this.caption.textContent = `${date} · ${place}`;
-    });
+    const place = placeName([item]);
+    this.caption.textContent = place ? `${date} · ${place}` : date;
     this.actions.replaceChildren(
       h('a.text-button', { href: `${item.originalUrl}?download`, download: item.name, title: 'Download original' }, icon('down'), 'save'),
       ...this.actionsFor(item).map((a) => this.actionButton(a, item)),

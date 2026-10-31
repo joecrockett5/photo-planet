@@ -2,10 +2,34 @@ import { clamp, lonDelta, wrapLon } from './geo';
 
 const IDLE_SPEED = -2.4; // deg/s; negative = the surface drifts west → east, like the real Earth
 const IDLE_DELAY = 3.5; // seconds after the last touch before idle spin resumes
-const FRICTION = 3.2; // inertia decay rate (1/s)
+// Fling: after letting go the globe keeps the speed you threw it at and slows
+// down exponentially, like Google Earth. velocity halves every ln2/FRICTION s.
+const FRICTION = 1.1; // 1/s: a brisk flick coasts for ~3 seconds
+const FLING_WINDOW = 80; // ms of pointer movement used to measure the throw
+const FLING_STALE = 60; // ms: if the pointer had stopped this long before release, no fling
+const MAX_SPIN = 600; // deg/s
 const MAX_LAT = 80;
 export const MIN_ZOOM = 0.7;
 export const MAX_ZOOM = 3.4;
+
+/**
+ * Pointer speed (deg/s) over the last FLING_WINDOW ms before `now`. Zero if
+ * the pointer had come to rest before release.
+ */
+export function flingVelocity(samples: { t: number; dLat: number; dLon: number }[], now: number): { lat: number; lon: number } {
+  const last = samples[samples.length - 1];
+  if (!last || now - last.t > FLING_STALE) return { lat: 0, lon: 0 };
+  const inWindow = samples.filter((s) => now - s.t <= FLING_WINDOW);
+  if (!inWindow.length) return { lat: 0, lon: 0 };
+  // motion in the window started at the sample just before it (or ~a frame earlier)
+  const firstIdx = samples.indexOf(inWindow[0]!);
+  const start = firstIdx > 0 ? samples[firstIdx - 1]!.t : inWindow[0]!.t - 16;
+  const span = Math.max(16, now - start) / 1000;
+  return {
+    lat: inWindow.reduce((a, s) => a + s.dLat, 0) / span,
+    lon: inWindow.reduce((a, s) => a + s.dLon, 0) / span,
+  };
+}
 
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
@@ -56,7 +80,8 @@ export class PlanetControl {
     this.lat = clamp(this.lat + dLat, -MAX_LAT, MAX_LAT);
     this.version++;
     this.samples.push({ t: now, dLat, dLon });
-    while (this.samples.length && now - this.samples[0]!.t > 100) this.samples.shift();
+    // keep one sample older than the window, to know when the window's motion began
+    while (this.samples.length > 2 && now - this.samples[1]!.t > FLING_WINDOW) this.samples.shift();
   }
 
   startDrag(): void {
@@ -69,19 +94,12 @@ export class PlanetControl {
     this.sinceTouch = 0;
   }
 
-  endDrag(now: number, reducedMotion = false): void {
+  /** Let go: carry on at the speed the pointer was moving (a fling). */
+  endDrag(now: number): void {
     this.dragging = false;
-    if (reducedMotion) {
-      // no glide after letting go
-      this.samples = [];
-      return;
-    }
-    const recent = this.samples.filter((s) => now - s.t < 100);
-    if (recent.length >= 2) {
-      const span = Math.max(16, now - recent[0]!.t) / 1000;
-      this.vLon = clamp(recent.reduce((a, s) => a + s.dLon, 0) / span, -400, 400);
-      this.vLat = clamp(recent.reduce((a, s) => a + s.dLat, 0) / span, -300, 300);
-    }
+    const v = flingVelocity(this.samples, now);
+    this.vLon = clamp(v.lon, -MAX_SPIN, MAX_SPIN);
+    this.vLat = clamp(v.lat, -MAX_SPIN / 2, MAX_SPIN / 2);
     this.samples = [];
   }
 
