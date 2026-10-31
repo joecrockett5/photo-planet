@@ -374,3 +374,57 @@ body.dropping::after {
     transition: none !important;
   }
 }
+
+/* ------------------------------------------------------------------ M7: tray, placing, toast */
+
+.unplaced {
+  position: fixed;
+  left: calc(var(--gap) - calc(var(--tpx) * 2));
+  bottom: calc(var(--gap) - calc(var(--tpx) * 3) + env(safe-area-inset-bottom));
+}
+
+.placing {
+  position: fixed;
+  left: var(--gap);
+  right: var(--gap);
+  top: var(--gap);
+  width: fit-content;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--tpx) * 4);
+  padding: 0 0 0 var(--px);
+  background: var(--c-space);
+  border: var(--px) solid var(--c-pin);
+  z-index: 3;
+}
+.placing-thumb img {
+  display: block;
+  width: calc(var(--px) * 9);
+  height: calc(var(--px) * 9);
+  object-fit: cover;
+}
+body.placing-mode .title {
+  visibility: hidden;
+}
+
+.toast {
+  position: fixed;
+  left: var(--gap);
+  right: var(--gap);
+  /* above the bottom corners (counter and +) */
+  bottom: calc(var(--gap) + 40px + env(safe-area-inset-bottom));
+  width: fit-content;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--tpx) * 2);
+  padding: 0 0 0 calc(var(--tpx) * 4);
+  min-height: 36px;
+  background: var(--c-space);
+  border: var(--tpx) solid var(--c-starDim);
+  z-index: 6;
+}
+.toast .text-button {
+  color: var(--c-pinLight);
+}

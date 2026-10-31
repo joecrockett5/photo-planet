@@ -19,6 +19,11 @@ export class Gallery {
   isOpen = false;
   onClose: (() => void) | null = null;
   onOpenItem: ((items: MediaItem[], index: number) => void) | null = null;
+  /** Which items belong here, given the full list (for live updates). */
+  private keep: (item: MediaItem) => boolean = (i) => i.lat !== null;
+  private fixedTitle: string | null = null;
+  /** Unplaced tray mode: show every item matching `keep`, not a fixed set. */
+  private live = false;
 
   constructor(parent: HTMLElement) {
     const close = h('button.icon-button.gallery-close', { 'aria-label': 'Close', onclick: () => this.close() }, icon('close'));
@@ -31,13 +36,12 @@ export class Gallery {
     parent.append(this.el);
   }
 
+  /** The items at a place. */
   open(items: MediaItem[]): void {
-    this.ids = items.map((i) => i.id);
-    this.isOpen = true;
-    this.el.hidden = false;
-    this.render(items);
-    this.grid.scrollTop = 0;
-    requestAnimationFrame(() => this.el.classList.add('open'));
+    this.keep = (i) => i.lat !== null;
+    this.live = false;
+    this.fixedTitle = null;
+    this.show(items);
     const token = ++this.placeToken;
     this.title.textContent = '';
     void placeName(items).then((name) => {
@@ -45,11 +49,37 @@ export class Gallery {
     });
   }
 
+  /** The unplaced tray: everything without a location. */
+  openTray(all: MediaItem[]): void {
+    this.keep = (i) => i.lat === null;
+    this.live = true;
+    this.fixedTitle = 'Unplaced';
+    ++this.placeToken;
+    this.title.textContent = this.fixedTitle;
+    this.show(all.filter(this.keep));
+  }
+
+  get isTray(): boolean {
+    return this.isOpen && this.live;
+  }
+
+  private show(items: MediaItem[]) {
+    this.ids = items.map((i) => i.id);
+    this.isOpen = true;
+    this.el.hidden = false;
+    this.el.classList.toggle('tray', this.live);
+    this.render(items);
+    this.grid.scrollTop = 0;
+    requestAnimationFrame(() => this.el.classList.add('open'));
+  }
+
   /** Keep in sync with the store: drop deleted or moved-away items, refresh statuses. */
   update(all: MediaItem[]): void {
     if (!this.isOpen) return;
     const byId = new Map(all.map((i) => [i.id, i]));
-    const items = this.ids.map((id) => byId.get(id)).filter((i): i is MediaItem => !!i && i.lat !== null);
+    const items = this.live
+      ? all.filter(this.keep)
+      : this.ids.map((id) => byId.get(id)).filter((i): i is MediaItem => !!i && this.keep(i));
     this.ids = items.map((i) => i.id);
     if (!items.length) return this.close();
     this.render(items);
@@ -65,7 +95,9 @@ export class Gallery {
 
   private render(items: MediaItem[]) {
     this.items = [...items].sort(byDate);
-    this.sub.textContent = describeItems(this.items);
+    this.sub.textContent = this.live
+      ? `${describeItems(this.items)} without a location. Open one to place it`
+      : describeItems(this.items);
     const groups = new Map<string | null, MediaItem[]>();
     for (const item of this.items) {
       const key = dayKey(item);

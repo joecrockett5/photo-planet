@@ -8,6 +8,9 @@ export interface ViewerAction {
   label: string;
   icon: Parameters<typeof icon>[0];
   run: (item: MediaItem) => void;
+  /** Ask again before running: the button turns into this text first. */
+  confirm?: string;
+  danger?: boolean;
 }
 
 /** Full-screen viewer: swipe or arrow keys to move, Esc or tap outside to close. */
@@ -23,7 +26,7 @@ export class Viewer {
   private index = 0;
   private token = 0;
   isOpen = false;
-  extraActions: ViewerAction[] = [];
+  actionsFor: (item: MediaItem) => ViewerAction[] = () => [];
 
   constructor(parent: HTMLElement) {
     this.prevBtn = h('button.icon-button.viewer-prev', { 'aria-label': 'Previous', onclick: () => this.step(-1) }, icon('left'));
@@ -138,8 +141,28 @@ export class Viewer {
     });
     this.actions.replaceChildren(
       h('a.text-button', { href: `${item.originalUrl}?download`, download: item.name, title: 'Download original' }, icon('down'), 'save'),
-      ...this.extraActions.map((a) => h('button.text-button', { onclick: () => a.run(item) }, icon(a.icon), a.label)),
+      ...this.actionsFor(item).map((a) => this.actionButton(a, item)),
     );
+  }
+
+  private actionButton(a: ViewerAction, item: MediaItem): HTMLElement {
+    const label = document.createTextNode(a.label);
+    const btn = h(`button.text-button${a.danger ? '.danger' : ''}`, {}, icon(a.icon), label);
+    let timer: number | undefined;
+    btn.addEventListener('click', () => {
+      if (a.confirm && !btn.classList.contains('armed')) {
+        btn.classList.add('armed');
+        label.textContent = a.confirm;
+        timer = window.setTimeout(() => {
+          btn.classList.remove('armed');
+          label.textContent = a.label;
+        }, 3000);
+        return;
+      }
+      clearTimeout(timer);
+      a.run(item);
+    });
+    return btn;
   }
 
   private attachSwipe() {
