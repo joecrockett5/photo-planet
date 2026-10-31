@@ -184,7 +184,7 @@ Docker, and with `npm run check` passing.
 - [x] **M3 Derived files:** thumbnails, HEIC → JPEG, video poster + transcode
       when needed, background job queue, status field.
 - [x] **M4 Starfield:** pixel-art sky, full-screen, crisp at any size/DPR.
-- [ ] **M5 Planet:** software-rendered pixel planet with real geography,
+- [x] **M5 Planet:** software-rendered pixel planet with real geography,
       palette, dithered lighting, drag/inertia/idle spin/zoom.
 - [ ] **M6 Pins and gallery:** pins from `/api/media`, clustering, click to
       centre and open gallery, full-screen viewer with video playback.
