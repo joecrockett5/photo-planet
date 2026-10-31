@@ -49,7 +49,7 @@ store.subscribe((items) => {
   const unplaced = store.unplaced.length;
   unplacedButton.hidden = unplaced === 0;
   unplacedButton.textContent = `${unplaced} unplaced`;
-  if (placing.item && !store.get(placing.item.id)) placing.cancel();
+  if (placing.active && placing.items.some((i) => !store.get(i.id))) placing.cancel();
   emptyHint.hidden = items.length > 0;
   gallery.update(items);
   viewer.update(items);
@@ -96,6 +96,7 @@ gallery.onClose = () => {
   document.body.classList.remove('gallery-open');
 };
 gallery.onOpenItem = (items, index) => viewer.open(items, index);
+gallery.onPlace = (items) => startPlacing(items);
 
 scene.onTap = (x, y) => {
   if (placing.active) return void placeAt(x, y);
@@ -106,36 +107,76 @@ scene.onTap = (x, y) => {
 
 // ---------------------------------------------------------------- placing and editing
 
-function startPlacing(item: MediaItem) {
+function startPlacing(items: MediaItem[]) {
+  if (!items.length) return;
   viewer.close();
   gallery.close();
-  placing.start(item);
-  // show the item's current spot, if it has one, as a starting point
-  if (item.lat !== null && item.lon !== null) scene.control.flyTo(item.lat, item.lon);
+  placing.start(items);
+  // a single item being moved: start from where it is now
+  const first = items[0]!;
+  if (items.length === 1 && first.lat !== null && first.lon !== null) scene.control.flyTo(first.lat, first.lon);
 }
 
-placing.onChange = (item) => {
+placing.onChange = (items) => {
+  if (!items) scene.setOffset(0, 0);
   scene.pins.ghost = null;
-  scene.control.idleEnabled = !item;
-  scene.px.canvas.style.cursor = item ? 'crosshair' : '';
+  scene.control.idleEnabled = !items;
+  scene.px.canvas.style.cursor = items ? 'crosshair' : '';
   scene.invalidate();
 };
 
-async function placeAt(x: number, y: number) {
-  const item = placing.item;
-  const spot = item && unproject(scene.view, x, y);
-  if (!item || !spot) return;
-  const before = { lat: item.lat, lon: item.lon };
+// Keep the planet's centre (where a previewed town turns to) clear of the panel.
+placing.onResize = (bottom) => {
+  scene.setOffset(0, bottom / 2 / scene.px.cssPx);
+};
+
+// Moving through suggestions previews them: the planet turns there and a pin blinks.
+placing.onPreview = (match) => {
+  scene.pins.ghost = match ? { lat: match.lat, lon: match.lon } : null;
+  if (match) scene.control.flyTo(match.lat, match.lon, Math.max(scene.control.zoom, 1.6), 0.6);
+  scene.invalidate();
+};
+placing.onChoose = (match) => {
+  scene.control.flyTo(match.lat, match.lon, Math.max(scene.control.zoom, 1.6), 0.6);
+  void placeItems(match.lat, match.lon);
+};
+
+/** Tap on the planet while placing. */
+function placeAt(x: number, y: number) {
+  const spot = unproject(scene.view, x, y);
+  if (spot) void placeItems(spot.lat, spot.lon);
+}
+
+async function placeItems(lat: number, lon: number) {
+  const items = placing.items;
+  if (!items.length) return;
+  const before = items.map((i) => ({ id: i.id, lat: i.lat, lon: i.lon }));
   placing.cancel();
   try {
-    store.upsert(await api.setLocation(item.id, spot.lat, spot.lon));
-    const place = await placeName([spot]);
-    toast.show(place ? `Placed in ${place}` : 'Placed', {
-      label: 'undo',
-      run: () => void api.setLocation(item.id, before.lat, before.lon).then((i) => store.upsert(i)),
-    });
+    const placed = await api.setLocations(items.map((i) => i.id), lat, lon);
+    store.upsert(...placed);
+    const place = placeName(placed);
+    const what = placed.length === 1 ? 'Placed' : `Placed ${placed.length}`;
+    toast.show(place ? `${what} in ${place}` : what, { label: 'undo', run: () => void restore(before) });
   } catch (err) {
-    toast.show(`Couldn't place it: ${(err as Error).message}`);
+    toast.show(`Couldn't place ${items.length === 1 ? 'it' : 'them'}: ${(err as Error).message}`);
+  }
+}
+
+/** Put items back where they were (undo). Groups by old location: usually all unplaced. */
+async function restore(before: { id: string; lat: number | null; lon: number | null }[]) {
+  const groups = new Map<string, typeof before>();
+  for (const b of before) {
+    const key = `${b.lat},${b.lon}`;
+    groups.set(key, [...(groups.get(key) ?? []), b]);
+  }
+  try {
+    for (const group of groups.values()) {
+      const { lat, lon } = group[0]!;
+      store.upsert(...(await api.setLocations(group.map((b) => b.id), lat, lon)));
+    }
+  } catch (err) {
+    toast.show(`Couldn't undo: ${(err as Error).message}`);
   }
 }
 
@@ -163,13 +204,12 @@ async function remove(item: MediaItem) {
 
 viewer.actionsFor = (item) => [
   item.lat === null
-    ? { label: 'place', icon: 'pin', run: startPlacing }
-    : { label: 'move', icon: 'pin', run: startPlacing },
+    ? { label: 'place', icon: 'pin', run: (i) => startPlacing([i]) }
+    : { label: 'move', icon: 'pin', run: (i) => startPlacing([i]) },
   ...(item.lat !== null ? [{ label: 'unplace', icon: 'unpin' as const, run: unplace }] : []),
   { label: 'delete', icon: 'trash', run: remove, confirm: 'sure?', danger: true },
 ];
 
-let hoverToken = 0;
 scene.onHover = (x, y) => {
   if (placing.active) {
     scene.pins.ghost = x < 0 ? null : unproject(scene.view, x, y);
@@ -187,18 +227,15 @@ scene.onHover = (x, y) => {
 };
 
 function showHoverLabel(hit: PinHit | null) {
-  const token = ++hoverToken;
   if (!hit || gallery.isOpen) {
     hoverLabel.hidden = true;
     return;
   }
   const items: MediaItem[] = hit.cluster.items;
-  hoverLabel.textContent = describeItems(items);
+  const place = placeName(items, 'short');
+  hoverLabel.textContent = place ? `${place} · ${describeItems(items)}` : describeItems(items);
   hoverLabel.hidden = false;
   positionHoverLabel();
-  void placeName(items).then((place) => {
-    if (token === hoverToken && place) hoverLabel.textContent = `${place} · ${describeItems(items)}`;
-  });
 }
 
 function positionHoverLabel() {

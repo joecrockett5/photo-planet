@@ -35,8 +35,11 @@ export function run(
 
 const available = new Map<string, Promise<boolean>>();
 
-/** Whether a command-line tool exists. Cached; logs once when missing. */
-export function hasTool(cmd: string, versionArg = '-version'): Promise<boolean> {
+/**
+ * Whether a command-line tool exists. Cached; logs once when missing unless
+ * `quiet` (for optional alternatives we just probe for).
+ */
+export function hasTool(cmd: string, versionArg = '-version', quiet = false): Promise<boolean> {
   let p = available.get(cmd);
   if (!p) {
     p = run(cmd, [versionArg], { timeoutMs: 10_000 }).then(
@@ -44,7 +47,7 @@ export function hasTool(cmd: string, versionArg = '-version'): Promise<boolean> 
       (err: { code?: unknown }) => {
         // A non-zero exit still means the binary exists; ENOENT means it doesn't.
         if (err.code === 'ENOENT') {
-          console.warn(`[photo-planet] '${cmd}' not found: related media features will be skipped`);
+          if (!quiet) console.warn(`[photo-planet] '${cmd}' not found: related media features will be skipped`);
           return false;
         }
         return true;

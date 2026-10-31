@@ -10,15 +10,26 @@ export interface MediaItem {
   lat: number | null;
   lon: number | null;
   locationSource: 'exif' | 'manual' | null;
+  /** Worked out by the server from lat/lon, offline. Null when unplaced. */
+  place: { city: string | null; country: string | null } | null;
   takenAt: string | null;
   uploadedAt: string;
   width: number | null;
   height: number | null;
   duration: number | null;
   status: Status;
+  error: string | null;
   thumbUrl: string | null;
   displayUrl: string;
   originalUrl: string;
+}
+
+/** A town found by name. */
+export interface PlaceMatch {
+  name: string;
+  country: string;
+  lat: number;
+  lon: number;
 }
 
 export interface AppConfig {
@@ -60,6 +71,19 @@ export const api = {
     })
       .then((r) => json<{ item: MediaItem }>(r))
       .then((r) => r.item),
+  /** Set or clear the location of several items at once. */
+  setLocations: (ids: string[], lat: number | null, lon: number | null) =>
+    fetch('/api/media', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ids, lat, lon }),
+    })
+      .then((r) => json<{ items: MediaItem[] }>(r))
+      .then((r) => r.items),
+  searchPlaces: (q: string, signal?: AbortSignal) =>
+    fetch(`/api/places?q=${encodeURIComponent(q)}`, { signal })
+      .then((r) => json<{ places: PlaceMatch[] }>(r))
+      .then((r) => r.places),
   remove: (id: string) => fetch(`/api/media/${id}`, { method: 'DELETE' }).then((r) => json<void>(r)),
   login: (password: string) =>
     fetch('/api/login', {

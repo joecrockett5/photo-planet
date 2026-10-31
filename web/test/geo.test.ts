@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { angleBetween, clusterItems, lonDelta, project, unproject, wrapLon, type View } from '../src/planet/geo';
+import { UnwrappedLon, angleBetween, clusterItems, fastAtan2, lonDelta, project, unproject, wrapLon, type View } from '../src/planet/geo';
 import { BIOME, decodeRle, encodeRle } from '../src/planet/earth-format';
 
 const view: View = { lat: 30, lon: -20, cx: 100, cy: 80, r: 60 };
@@ -35,6 +35,38 @@ describe('projection', () => {
   it('marks the far side as hidden and misses outside the disc', () => {
     expect(project(view, -30, 160).z).toBeLessThan(0);
     expect(unproject(view, 0, 0)).toBeNull();
+  });
+});
+
+describe('fastAtan2', () => {
+  it('matches Math.atan2 to well under a map texel everywhere', () => {
+    let worst = 0;
+    for (let i = 0; i < 20000; i++) {
+      const a = (i / 20000) * Math.PI * 2;
+      const r = 0.1 + (i % 7);
+      const y = Math.sin(a) * r;
+      const x = Math.cos(a) * r;
+      worst = Math.max(worst, Math.abs(fastAtan2(y, x) - Math.atan2(y, x)));
+    }
+    expect(worst * (180 / Math.PI)).toBeLessThan(0.02);
+    expect(fastAtan2(0, 0)).toBe(0);
+    expect(fastAtan2(1, 0)).toBeCloseTo(Math.PI / 2, 5);
+    expect(fastAtan2(0, -1)).toBeCloseTo(Math.PI, 5);
+  });
+});
+
+describe('UnwrappedLon', () => {
+  it('keeps counting across the antimeridian in both directions', () => {
+    const u = new UnwrappedLon();
+    const seen = [170, 179, -179, -170, 179, 170].map((l) => u.update(l));
+    expect(seen).toEqual([170, 179, 181, 190, 179, 170]);
+  });
+
+  it('accumulates whole turns', () => {
+    const u = new UnwrappedLon();
+    let lon = 0;
+    for (let i = 0; i < 72 * 3; i++) u.update((lon = wrapLon(lon + 5)));
+    expect(u.value).toBeCloseTo(3 * 360);
   });
 });
 

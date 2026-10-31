@@ -1,3 +1,5 @@
+import type { Place } from '../geo/places.js';
+
 export type Kind = 'photo' | 'video';
 export type Status = 'processing' | 'ready' | 'failed';
 export type LocationSource = 'exif' | 'manual';
@@ -35,18 +37,22 @@ export interface MediaItem {
   lat: number | null;
   lon: number | null;
   locationSource: LocationSource | null;
+  /** "Osaka", "Japan": worked out offline from lat/lon. Null when unplaced. */
+  place: Place | null;
   takenAt: string | null;
   uploadedAt: string;
   width: number | null;
   height: number | null;
   duration: number | null;
   status: Status;
+  /** Why processing failed, if it did. */
+  error: string | null;
   thumbUrl: string | null;
   displayUrl: string;
   originalUrl: string;
 }
 
-export function toItem(row: MediaRow): MediaItem {
+export function toItem(row: MediaRow, placeAt?: (lat: number, lon: number) => Place): MediaItem {
   // `v` busts caches when derived files appear later.
   const v = row.status === 'processing' ? '' : `?v=${row.status[0]}`;
   return {
@@ -58,12 +64,14 @@ export function toItem(row: MediaRow): MediaItem {
     lat: row.lat,
     lon: row.lon,
     locationSource: row.location_source,
+    place: row.lat !== null && row.lon !== null && placeAt ? placeAt(row.lat, row.lon) : null,
     takenAt: row.taken_at,
     uploadedAt: row.uploaded_at,
     width: row.width,
     height: row.height,
     duration: row.duration,
     status: row.status,
+    error: row.status === 'failed' ? row.error : null,
     thumbUrl: row.thumb_path ? `/media/${row.id}/thumb${v}` : null,
     displayUrl: `/media/${row.id}/display${v}`,
     originalUrl: `/media/${row.id}/original`,

@@ -32,7 +32,14 @@ export class JobQueue {
     });
   }
 
+  /**
+   * On start-up: pick up items a restart interrupted, and give failed items
+   * another go: a newer version or newly installed tool may handle them now.
+   */
   resume(): void {
+    for (const id of this.repo.idsWithStatus('failed')) {
+      this.repo.update(id, { status: 'processing' });
+    }
     for (const id of this.repo.idsWithStatus('processing')) this.enqueue(id);
   }
 

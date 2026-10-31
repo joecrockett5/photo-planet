@@ -31,6 +31,7 @@ npm run check        # typecheck + tests for all workspaces; must pass before co
 docker compose up --build   # full production-like run on :8080
 npm run earth -w web # regenerate the planet's geography (committed output)
 npm run icons -w web # regenerate favicon/touch icon from the planet renderer
+npm run places -w server -- <geonames dir>  # regenerate place-name data (see script header)
 ```
 
 In dev the server stores data in `server/data` (git-ignored); in Docker it uses `/data`.
@@ -40,6 +41,7 @@ Pass `APP_PASSWORD=… PLANET_TITLE=…` to `npm run dev` to try login/title loc
 
 - `server/src/media/`: metadata (`metadata.ts`, `exif-blocks.ts`, `iso6709.ts`),
   derived files (`derive.ts`), the job queue, DB access (`repo.ts`).
+- `server/src/geo/places.ts`: offline reverse geocoding (data in `server/geo/`).
 - `server/src/auth.ts`: password + signed cookie. `server/migrations/*.sql`: schema.
 - `web/src/render/`: pixel canvas, palette, stars, planet ray-caster, pins.
 - `web/src/planet/`: sphere maths + clustering (`geo.ts`), motion (`control.ts`), map loading.
@@ -49,9 +51,11 @@ Pass `APP_PASSWORD=… PLANET_TITLE=…` to `npm run dev` to try login/title loc
 ## System dependencies
 
 The server shells out to `ffmpeg`/`ffprobe` (video metadata, posters, transcodes)
-and `heif-convert` (HEIC → JPEG). They're installed in the Docker image. For
-local dev without them, the code should degrade gracefully (log a warning, mark
-the derived file as missing) rather than crash. In a fresh Linux sandbox:
+and, when present, `heif-dec`/`heif-convert` (HEIC → JPEG; otherwise a bundled
+WebAssembly libheif in `server/workers/heic-decode.mjs` takes over). They're
+installed in the Docker image. For local dev without them, the code should
+degrade gracefully (log a warning, mark the item failed with a reason) rather
+than crash. In a fresh Linux sandbox:
 `apt-get install -y ffmpeg libheif-examples` (on Ubuntu 24.04+/Debian trixie+ also
 `libheif-plugin-libde265`, or heif-convert can't decode HEIC).
 

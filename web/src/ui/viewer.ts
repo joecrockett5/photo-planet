@@ -24,7 +24,6 @@ export class Viewer {
   private nextBtn: HTMLButtonElement;
   private items: MediaItem[] = [];
   private index = 0;
-  private token = 0;
   isOpen = false;
   actionsFor: (item: MediaItem) => ViewerAction[] = () => [];
 
@@ -101,9 +100,7 @@ export class Viewer {
     this.index = index;
     const item = this.items[index]!;
     let media: HTMLElement;
-    if (item.status === 'failed' && !item.thumbUrl) {
-      media = h('p.viewer-missing', {}, "This file can't be shown here. ", h('a', { href: `${item.originalUrl}?download` }, 'Download it'));
-    } else if (item.kind === 'video') {
+    if (item.kind === 'video') {
       media = h('video.viewer-media', {
         src: item.displayUrl,
         poster: item.thumbUrl ?? undefined,
@@ -112,10 +109,12 @@ export class Viewer {
         preload: 'metadata',
       });
     } else {
+      // Even when processing failed, the original may still display: Safari
+      // shows HEIC natively. Fall back to the thumbnail, then to a message.
       const img = h('img.viewer-media', { src: item.status === 'processing' && item.thumbUrl ? item.thumbUrl : item.displayUrl, alt: item.name });
-      // fall back to the thumbnail if the browser can't decode the file
       img.onerror = () => {
         if (item.thumbUrl && img.src !== new URL(item.thumbUrl, location.href).href) img.src = item.thumbUrl;
+        else if (this.current === item) this.showMissing(item);
       };
       media = img;
     }
@@ -135,17 +134,26 @@ export class Viewer {
     }
   }
 
+  private showMissing(item: MediaItem) {
+    this.stage.classList.remove('loading');
+    this.stage.replaceChildren(
+      h(
+        'div.viewer-missing',
+        {},
+        h('p', {}, "This file can't be shown in this browser. ", h('a', { href: `${item.originalUrl}?download` }, 'Download it')),
+        item.error ? h('p.viewer-error', {}, item.error) : null,
+      ),
+    );
+  }
+
   private renderMeta() {
     const item = this.items[this.index]!;
     const multi = this.items.length > 1;
     this.prevBtn.hidden = this.nextBtn.hidden = !multi;
     this.counter.textContent = multi ? `${this.index + 1}/${this.items.length}` : '';
     const date = formatDay(dayKey(item));
-    this.caption.textContent = date;
-    const token = ++this.token;
-    void placeName([item]).then((place) => {
-      if (token === this.token && place) this.caption.textContent = `${date} · ${place}`;
-    });
+    const place = placeName([item]);
+    this.caption.textContent = place ? `${date} · ${place}` : date;
     this.actions.replaceChildren(
       h('a.text-button', { href: `${item.originalUrl}?download`, download: item.name, title: 'Download original' }, icon('down'), 'save'),
       ...this.actionsFor(item).map((a) => this.actionButton(a, item)),

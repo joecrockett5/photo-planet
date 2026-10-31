@@ -1,8 +1,9 @@
-import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { hasTool, run } from '../exec.js';
 import type { Storage } from '../storage.js';
+import { heifToJpeg } from './heif.js';
 import { ffprobe, type Probe } from './metadata.js';
 import type { MediaRow } from './types.js';
 
@@ -38,12 +39,9 @@ async function derivePhoto(row: MediaRow, storage: Storage, save: (f: DerivedFie
   let source = storage.abs(row.original_path);
 
   if (HEIF_MIMES.has(row.mime)) {
-    // sharp's prebuilt libvips can't decode HEVC-coded HEIF; heif-convert can.
-    if (!(await hasTool('heif-convert', '--version'))) {
-      throw new MissingToolError('heif-convert is not installed, so this HEIC photo cannot be shown');
-    }
+    // sharp's prebuilt libvips can't decode HEVC-coded HEIF: see heif.ts.
     const displayRel = storage.derivedRel(row.id, 'display.jpg');
-    await heifToJpeg(source, storage.abs(displayRel), signal);
+    await heifToJpeg(source, storage.abs(displayRel), { signal });
     save({ display_path: displayRel });
     source = storage.abs(displayRel);
   }
@@ -61,18 +59,6 @@ async function derivePhoto(row: MediaRow, storage: Storage, save: (f: DerivedFie
     .webp({ quality: 78 })
     .toFile(storage.abs(thumbRel));
   save({ thumb_path: thumbRel, width: width ?? null, height: height ?? null });
-}
-
-async function heifToJpeg(input: string, output: string, signal?: AbortSignal) {
-  await run('heif-convert', ['-q', '90', input, output], { timeoutMs: 120_000, signal });
-  if (await exists(output)) return;
-  // Files with several top-level images come out as display-1.jpg, display-2.jpg...
-  const dir = path.dirname(output);
-  const base = path.basename(output, '.jpg');
-  const numbered = (await readdir(dir)).filter((f) => f.startsWith(`${base}-`) && f.endsWith('.jpg')).sort();
-  if (numbered.length === 0) throw new Error('heif-convert produced no image');
-  await rename(path.join(dir, numbered[0]!), output);
-  for (const extra of numbered.slice(1)) await rm(path.join(dir, extra), { force: true });
 }
 
 // ---------------------------------------------------------------- videos
@@ -164,9 +150,3 @@ async function transcode(input: string, output: string, probe: Probe, signal?: A
   }
 }
 
-async function exists(file: string) {
-  return stat(file).then(
-    () => true,
-    () => false,
-  );
-}
