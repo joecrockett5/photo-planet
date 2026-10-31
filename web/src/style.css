@@ -385,6 +385,66 @@ body.dropping::after {
 
 /* ------------------------------------------------------------------ M7: tray, placing, toast */
 
+.gallery-head-buttons {
+  display: flex;
+  align-items: center;
+}
+.gallery-select {
+  margin-top: calc(var(--px) * -1);
+}
+.gallery-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--px);
+  padding: var(--px) calc(var(--gap) - var(--tpx) * 2) calc(var(--px) + env(safe-area-inset-bottom)) var(--gap);
+  border-top: var(--px) solid var(--c-starDim);
+  color: var(--c-starMid);
+}
+.gallery-actions-buttons {
+  display: flex;
+}
+.gallery-place {
+  color: var(--c-pinLight);
+}
+.gallery-place:disabled {
+  color: var(--c-starDim);
+  cursor: default;
+}
+.gallery.selecting .thumb img {
+  opacity: 0.55;
+}
+.gallery.selecting .thumb.selected img {
+  opacity: 1;
+}
+.thumb.selected::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: var(--px) solid var(--c-pin);
+}
+.thumb-check {
+  position: absolute;
+  right: var(--tpx);
+  top: var(--tpx);
+  display: grid;
+  place-items: center;
+  width: calc(var(--px) * 4);
+  height: calc(var(--px) * 4);
+  background: var(--c-space);
+  border: var(--tpx) solid var(--c-starMid);
+  color: transparent;
+}
+.thumb.selected .thumb-check {
+  background: var(--c-pin);
+  border-color: var(--c-pin);
+  color: var(--c-space);
+}
+.thumb-check .icon {
+  width: calc(var(--w) * var(--tpx));
+  height: calc(var(--h) * var(--tpx));
+}
+
 .unplaced {
   position: fixed;
   left: calc(var(--gap) - calc(var(--tpx) * 2));
@@ -396,21 +456,98 @@ body.dropping::after {
   left: var(--gap);
   right: var(--gap);
   top: var(--gap);
-  width: fit-content;
+  width: min(26em, 100%);
   margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: calc(var(--tpx) * 4);
-  padding: 0 0 0 var(--px);
   background: var(--c-space);
   border: var(--px) solid var(--c-pin);
   z-index: 3;
+}
+.placing-head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--tpx) * 4);
+  padding-left: var(--px);
+}
+.placing-text {
+  flex: 1;
+  min-width: 0;
+}
+.placing-thumbs {
+  display: flex;
+  flex: none;
 }
 .placing-thumb img {
   display: block;
   width: calc(var(--px) * 9);
   height: calc(var(--px) * 9);
   object-fit: cover;
+}
+.placing-thumb + .placing-thumb {
+  /* a little stack */
+  margin-left: calc(var(--px) * -5);
+  border-left: var(--tpx) solid var(--c-space);
+}
+.placing-more {
+  align-self: center;
+  margin-left: calc(var(--tpx) * 2);
+  color: var(--c-starMid);
+}
+.placing-search {
+  padding: 0 var(--px) var(--px);
+}
+.placing-input {
+  display: block;
+  width: 100%;
+  height: 40px;
+  padding: 0 calc(var(--tpx) * 4);
+  font: inherit;
+  /* iOS zooms into inputs under 16px */
+  font-size: max(16px, calc(var(--tpx) * 8));
+  color: var(--c-starBright);
+  background: var(--c-nebula1);
+  border: var(--tpx) solid var(--c-starDim);
+  border-radius: 0;
+  outline: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.placing-input:focus {
+  border-color: var(--c-starMid);
+}
+.placing-input::placeholder {
+  color: var(--c-starDim);
+}
+.placing-input::-webkit-search-cancel-button {
+  display: none;
+}
+.placing-suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 var(--px);
+  max-height: min(50vh, 22em);
+  overflow-y: auto;
+}
+.placing-option {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--tpx) * 6);
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  padding: 0 calc(var(--tpx) * 5);
+  text-align: left;
+}
+.placing-option.active,
+.placing-option:hover {
+  background: var(--c-nebula2);
+}
+.placing-country {
+  color: var(--c-starMid);
+  text-align: right;
+}
+.placing-none {
+  padding: calc(var(--tpx) * 3) calc(var(--tpx) * 5);
+  color: var(--c-starMid);
 }
 body.placing-mode .title {
   visibility: hidden;

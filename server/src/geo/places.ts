@@ -2,6 +2,24 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 
+/** A town found by name, for "type where it was taken". */
+export interface PlaceMatch {
+  name: string;
+  country: string;
+  lat: number;
+  lon: number;
+}
+
+/** Lower-case, accents stripped, punctuation to spaces: "Kraków" → "krakow". */
+export function normalizeName(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
 /** Where a photo was taken, in words. */
 export interface Place {
   /** Town or city, e.g. "Osaka". Null out at sea, in the wilderness, etc. */
@@ -51,6 +69,7 @@ export class Places {
   private countryMap: { width: number; height: number; data: Uint8Array } | null = null;
   private countryCodes: string[] = [];
   private cache = new Map<string, Place>();
+  private searchNames: string[] = [];
 
   static load(dir = GEO_DIR): Places {
     const p = new Places();
@@ -65,6 +84,7 @@ export class Places {
       const [name, lat, lon, pop, cc, rank] = line.split('\t');
       if (!name || !cc) continue;
       p.names.push(name);
+      p.searchNames.push(normalizeName(name));
       p.cc.push(cc);
       p.lat[i] = Number(lat);
       p.lon[i] = Number(lon);
@@ -90,6 +110,44 @@ export class Places {
       this.cache.set(key, place);
     }
     return place;
+  }
+
+  /**
+   * Towns whose name matches what's been typed so far, best first. Score is
+   * log10(population) plus a bonus for how well the name matches (exact >
+   * starts with > a word starts with: "york" → New York City), so a big
+   * prefix match beats a tiny exact one ("osa" → Osaka before Osa, Russia).
+   * "paris, fr" narrows by country.
+   */
+  search(query: string, limit = 8): PlaceMatch[] {
+    const [townPart = '', countryPart = ''] = query.split(',');
+    const q = normalizeName(townPart);
+    const cq = normalizeName(countryPart);
+    if (!q) return [];
+    const wordQ = ` ${q}`;
+    const found: { i: number; score: number }[] = [];
+    for (let i = 0; i < this.searchNames.length; i++) {
+      const n = this.searchNames[i]!;
+      const bonus = n === q ? 1.5 : n.startsWith(q) ? 1 : n.includes(wordQ) ? 0.5 : -1;
+      if (bonus < 0) continue;
+      if (cq) {
+        const country = normalizeName(countryName(this.cc[i]!));
+        if (!country.startsWith(cq) && !country.includes(` ${cq}`) && this.cc[i]!.toLowerCase() !== cq) continue;
+      }
+      found.push({ i, score: Math.log10(this.pop[i]!) + bonus });
+    }
+    found.sort((a, b) => b.score - a.score);
+    const out: PlaceMatch[] = [];
+    const seen = new Set<string>();
+    for (const { i } of found) {
+      const country = countryName(this.cc[i]!);
+      const key = `${this.names[i]}|${country}`;
+      if (seen.has(key)) continue; // e.g. several "Springfield"s in one country: keep the biggest
+      seen.add(key);
+      out.push({ name: this.names[i]!, country, lat: this.lat[i]!, lon: this.lon[i]! });
+      if (out.length >= limit) break;
+    }
+    return out;
   }
 
   private compute(lat: number, lon: number): Place {

@@ -161,6 +161,8 @@ server/   Fastify + TypeScript, SQLite (better-sqlite3), sharp, exifr, ffmpeg/ff
 | GET | `/api/media/:id` | one item |
 | POST | `/api/media` | multipart upload, one or more files → `{ results: [{ name, item?, duplicate?, error? }] }` |
 | PATCH | `/api/media/:id` | update `{ lat, lon }` |
+| PATCH | `/api/media` | place or clear several at once: `{ ids, lat, lon }` → `{ items }` |
+| GET | `/api/places?q=` | search towns by name → `{ places: [{ name, country, lat, lon }] }` (max 8) |
 | DELETE | `/api/media/:id` | delete item and files |
 | GET | `/media/:id/thumb` | thumbnail |
 | GET | `/media/:id/display` | browser-viewable version (or original) |
@@ -242,9 +244,15 @@ deliberately differs. Revisit any of them freely.
 - **Gallery** dims the planet (a flat CSS brightness step, no overlay) and
   slides it beside the panel; tapping the planet away from pins closes it,
   tapping another pin switches to it.
-- **Placing** an unplaced item is done from the viewer (*place*), then one tap
-  on the planet; an undo toast follows. The same flow re-places (*move*) an
-  item; *unplace* sends it back to the tray.
+- **Placing** an unplaced item is done from the viewer (*place*), or for
+  several at once from the tray's *select* mode (*place* in its footer). Then
+  either tap the planet, or type a town and pick a suggestion: moving through
+  suggestions turns the planet there and blinks a pin, with the planet shifted
+  below the panel so the spot stays visible. The town's own coordinates are
+  used. An undo toast follows. The same flow re-places (*move*) an item;
+  *unplace* sends it back to the tray. Town search ranks by log10(population)
+  plus a bonus for exact > prefix > word-prefix matches ("osa" → Osaka, not
+  Osa), ignores accents, and "paris, us" narrows by country.
 - **Opening the app** turns the planet to the most recent memory.
 - **Sessions** last 400 days (the browser maximum); the cookie value
   fingerprints `APP_PASSWORD`, so changing the password logs everyone out.

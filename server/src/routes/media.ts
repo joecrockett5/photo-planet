@@ -38,26 +38,37 @@ export function mediaRoutes(app: FastifyInstance, ctx: AppContext): void {
     return reply.code(status).send({ results });
   });
 
+  // Search towns by name (for placing photos by typing).
+  app.get<{ Querystring: { q?: string } }>('/api/places', async (req, reply) => {
+    const q = (req.query.q ?? '').slice(0, 100);
+    if (!q.trim()) return reply.code(400).send({ error: 'q is required' });
+    return { places: ctx.places().search(q) };
+  });
+
+  // Set (or clear) the location of several items at once.
+  app.patch<{ Body: { ids?: unknown; lat?: unknown; lon?: unknown } }>('/api/media', async (req, reply) => {
+    const { ids, lat, lon } = req.body ?? {};
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 1000 || !ids.every((i) => typeof i === 'string')) {
+      return reply.code(400).send({ error: 'ids must be a non-empty list of item ids' });
+    }
+    const loc = parseLocation(lat, lon);
+    if (!loc) return reply.code(400).send({ error: 'lat and lon must both be numbers in range, or both null' });
+    const rows = (ids as string[]).map((id) => repo.get(id));
+    if (rows.some((r) => !r)) return reply.code(404).send({ error: 'not found' });
+    ctx.db.transaction(() => {
+      for (const row of rows) repo.setLocation(row!.id, loc.lat, loc.lon, loc.lat === null ? null : 'manual');
+    })();
+    return { items: rows.map((r) => toItem(repo.get(r!.id)!)) };
+  });
+
   app.patch<{ Params: { id: string }; Body: { lat?: unknown; lon?: unknown } }>(
     '/api/media/:id',
     async (req, reply) => {
       const row = repo.get(req.params.id);
       if (!row) return reply.code(404).send({ error: 'not found' });
-      const { lat, lon } = req.body ?? {};
-      if (lat === null && lon === null) {
-        repo.setLocation(row.id, null, null, null);
-      } else if (
-        typeof lat === 'number' &&
-        typeof lon === 'number' &&
-        Number.isFinite(lat) &&
-        Number.isFinite(lon) &&
-        Math.abs(lat) <= 90 &&
-        Math.abs(lon) <= 180
-      ) {
-        repo.setLocation(row.id, lat, lon, 'manual');
-      } else {
-        return reply.code(400).send({ error: 'lat and lon must both be numbers in range, or both null' });
-      }
+      const loc = parseLocation(req.body?.lat, req.body?.lon);
+      if (!loc) return reply.code(400).send({ error: 'lat and lon must both be numbers in range, or both null' });
+      repo.setLocation(row.id, loc.lat, loc.lon, loc.lat === null ? null : 'manual');
       return { item: toItem(repo.get(row.id)!) };
     },
   );
@@ -101,4 +112,20 @@ export function mediaRoutes(app: FastifyInstance, ctx: AppContext): void {
       return reply.header('cache-control', cache).type(row.mime).sendFile(row.original_path, storage.root);
     },
   );
+}
+
+/** Both numbers in range (a manual location), or both null (unplace). */
+function parseLocation(lat: unknown, lon: unknown): { lat: number | null; lon: number | null } | null {
+  if (lat === null && lon === null) return { lat: null, lon: null };
+  if (
+    typeof lat === 'number' &&
+    typeof lon === 'number' &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lon) <= 180
+  ) {
+    return { lat, lon };
+  }
+  return null;
 }

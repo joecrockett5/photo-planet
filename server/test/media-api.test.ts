@@ -100,6 +100,34 @@ describe('media api', () => {
     expect(cleared.json().item).toMatchObject({ lat: null, lon: null, locationSource: null, place: null });
   });
 
+  it('places several items at once, and can clear them all', async () => {
+    const res = await upload([
+      { name: 'a.png', data: await tinyPng() },
+      { name: 'b.png', data: await tinyPng({ r: 0, g: 200, b: 0 }) },
+    ]);
+    const ids = res.json().results.map((r: { item: { id: string } }) => r.item.id);
+    const placed = await app.inject({ method: 'PATCH', url: '/api/media', payload: { ids, lat: 34.6937, lon: 135.5022 } });
+    expect(placed.statusCode).toBe(200);
+    expect(placed.json().items).toHaveLength(2);
+    for (const item of placed.json().items) {
+      expect(item).toMatchObject({ locationSource: 'manual', place: { city: 'Osaka', country: 'Japan' } });
+    }
+    const cleared = await app.inject({ method: 'PATCH', url: '/api/media', payload: { ids, lat: null, lon: null } });
+    expect(cleared.json().items.every((i: { lat: unknown }) => i.lat === null)).toBe(true);
+
+    const missing = await app.inject({ method: 'PATCH', url: '/api/media', payload: { ids: [...ids, 'nope'], lat: 1, lon: 1 } });
+    expect(missing.statusCode).toBe(404);
+    expect(app.ctx.repo.get(ids[0])!.lat).toBeNull(); // all or nothing
+    const bad = await app.inject({ method: 'PATCH', url: '/api/media', payload: { ids: [], lat: 1, lon: 1 } });
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it('searches places by name', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/places?q=osak' });
+    expect(res.json().places[0]).toMatchObject({ name: 'Osaka', country: 'Japan' });
+    expect((await app.inject({ method: 'GET', url: '/api/places?q=' })).statusCode).toBe(400);
+  });
+
   it('deletes an item and its files', async () => {
     const id = (await upload([{ name: 'a.png', data: await tinyPng() }])).json().results[0].item.id;
     const row = app.ctx.repo.get(id)!;

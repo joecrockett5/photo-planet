@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Places } from '../src/geo/places.js';
+import { normalizeName, Places } from '../src/geo/places.js';
 
 const places = Places.load();
 
@@ -41,5 +41,44 @@ describe('reverse geocoding', () => {
 
   it('works across the antimeridian', () => {
     expect(places.lookup(-18.1416, 178.4419)).toEqual({ city: 'Suva', country: 'Fiji' });
+  });
+});
+
+describe('search by name', () => {
+  const names = (q: string) => places.search(q).map((p) => `${p.name}, ${p.country}`);
+
+  it('suggests the big towns first as you type', () => {
+    expect(names('osa')[0]).toBe('Osaka, Japan');
+    expect(names('tok')[0]).toBe('Tokyo, Japan');
+    expect(names('lis')[0]).toBe('Lisbon, Portugal');
+    expect(names('Paris')[0]).toBe('Paris, France');
+  });
+
+  it('matches words inside names and ignores accents and case', () => {
+    expect(names('york')).toContain('New York City, United States');
+    expect(names('krakow')[0]).toBe('Kraków, Poland');
+    expect(names('SÃO PAULO'.replace('Ã', 'A'))[0]).toBe('São Paulo, Brazil');
+  });
+
+  it('narrows by country after a comma', () => {
+    const results = names('paris, united st');
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((r) => r.endsWith('United States'))).toBe(true);
+    expect(names('cambridge, us')[0]).toMatch(/United States$/);
+  });
+
+  it('returns coordinates, at most 8, without duplicates', () => {
+    const results = places.search('san');
+    expect(results.length).toBe(8);
+    expect(new Set(results.map((r) => `${r.name}|${r.country}`)).size).toBe(8);
+    const osaka = places.search('osaka')[0]!;
+    expect(osaka.lat).toBeCloseTo(34.69, 1);
+    expect(osaka.lon).toBeCloseTo(135.5, 1);
+  });
+
+  it('copes with empty and nonsense queries', () => {
+    expect(places.search('   ')).toEqual([]);
+    expect(places.search('zzzzqqqq')).toEqual([]);
+    expect(normalizeName('  Saint-Étienne ')).toBe('saint etienne');
   });
 });
