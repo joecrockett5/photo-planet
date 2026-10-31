@@ -1,45 +1,286 @@
-// Placeholder: a static pixel starfield and a flat pixel disc, just to prove the
-// low-res canvas + pixelated upscale pipeline. Replace with the real starfield
-// and planet renderer (see docs/SPEC.md, milestones M4 and M5).
+import '@fontsource/silkscreen/400.css';
+import './style.css';
+import { api, auth, type MediaItem } from './api';
+import { describeItems } from './format';
+import { motion } from './motion';
+import { unproject, type Cluster } from './planet/geo';
+import { applyPaletteToCss } from './render/palette';
+import type { PinHit, PlacedItem } from './render/pins';
+import { Scene } from './scene';
+import { store } from './store';
+import { h } from './ui/dom';
+import { Gallery } from './ui/gallery';
+import { Login } from './ui/login';
+import { Placing } from './ui/placing';
+import { Toast } from './ui/toast';
+import { placeName } from './ui/place';
+import { Uploader } from './ui/upload';
+import { Viewer } from './ui/viewer';
 
-const PIXEL = 4; // CSS px per art pixel
+applyPaletteToCss();
+const scene = new Scene(document.querySelector<HTMLCanvasElement>('#sky')!);
+const ui = h('div.ui');
+document.body.append(ui);
 
-const canvas = document.querySelector<HTMLCanvasElement>('#sky')!;
-const ctx = canvas.getContext('2d')!;
+const title = h('h1.title', {}, '');
+const hoverLabel = h('div.pin-label', { hidden: true });
+ui.append(title, hoverLabel);
 
-function draw() {
-  const w = Math.ceil(innerWidth / PIXEL);
-  const h = Math.ceil(innerHeight / PIXEL);
-  canvas.width = w;
-  canvas.height = h;
+const unplacedButton = h('button.text-button.unplaced', { hidden: true, onclick: () => openTray() });
+const coarse = matchMedia('(pointer: coarse)').matches;
+const emptyHint = h(
+  'p.empty-hint',
+  { hidden: true },
+  coarse ? 'A quiet little planet. Tap + to add your first photo' : 'A quiet little planet. Drop a photo here, or press +',
+);
+ui.append(unplacedButton, emptyHint);
 
-  ctx.fillStyle = '#0b0b1a';
-  ctx.fillRect(0, 0, w, h);
+const gallery = new Gallery(ui);
+const viewer = new Viewer(document.body);
+const uploader = new Uploader(ui);
+const placing = new Placing(ui);
+const toast = new Toast(ui);
+const login = new Login(document.body);
 
-  let seed = 42;
-  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  ctx.fillStyle = '#e8e8ff';
-  for (let i = 0; i < (w * h) / 60; i++) {
-    ctx.fillRect(Math.floor(rand() * w), Math.floor(rand() * h), 1, 1);
-  }
+// ---------------------------------------------------------------- data → scene
 
-  const r = Math.floor(Math.min(w, h) * 0.3);
-  const cx = Math.floor(w / 2);
-  const cy = Math.floor(h / 2);
-  for (let y = -r; y <= r; y++) {
-    for (let x = -r; x <= r; x++) {
-      if (x * x + y * y <= r * r) {
-        ctx.fillStyle = x + y < 0 ? '#3a7bd5' : '#24508f';
-        ctx.fillRect(cx + x, cy + y, 1, 1);
-      }
-    }
+store.subscribe((items) => {
+  scene.pins.setItems(store.placed);
+  const unplaced = store.unplaced.length;
+  unplacedButton.hidden = unplaced === 0;
+  unplacedButton.textContent = `${unplaced} unplaced`;
+  if (placing.item && !store.get(placing.item.id)) placing.cancel();
+  emptyHint.hidden = items.length > 0;
+  gallery.update(items);
+  viewer.update(items);
+  scene.invalidate();
+});
+
+// ---------------------------------------------------------------- pins
+
+/** Art-px forgiveness around pins: about 12 CSS px, more for fingers. */
+const slop = () => (matchMedia('(pointer: coarse)').matches ? 16 : 6) / scene.px.cssPx;
+
+function openCluster(cluster: Cluster<PlacedItem>) {
+  scene.pins.selected = new Set(cluster.items.map((i) => i.id));
+  scene.control.idleEnabled = false;
+  scene.control.flyTo(cluster.lat, cluster.lon);
+  gallery.open(cluster.items);
+  hoverLabel.hidden = true;
+  document.body.classList.add('gallery-open');
+  requestAnimationFrame(() => layoutForPanel());
+}
+
+/** Shift the planet so it sits in the space the panel leaves free. */
+function layoutForPanel() {
+  if (!gallery.isOpen) return scene.setOffset(0, 0);
+  const rect = gallery.el.getBoundingClientRect();
+  const wide = rect.height >= innerHeight - 1;
+  const cssPx = scene.px.cssPx;
+  scene.setOffset(wide ? -rect.width / 2 / cssPx : 0, wide ? 0 : -rect.height / 2 / cssPx);
+}
+addEventListener('resize', layoutForPanel);
+
+function openTray() {
+  placing.cancel();
+  scene.pins.selected = null;
+  gallery.openTray(store.items);
+  document.body.classList.add('gallery-open');
+  requestAnimationFrame(() => layoutForPanel());
+}
+
+gallery.onClose = () => {
+  scene.pins.selected = null;
+  scene.control.idleEnabled = true;
+  scene.setOffset(0, 0);
+  document.body.classList.remove('gallery-open');
+};
+gallery.onOpenItem = (items, index) => viewer.open(items, index);
+
+scene.onTap = (x, y) => {
+  if (placing.active) return void placeAt(x, y);
+  const hit = scene.pins.hitTest(x, y, slop());
+  if (hit) openCluster(hit.cluster);
+  else if (gallery.isOpen) gallery.close();
+};
+
+// ---------------------------------------------------------------- placing and editing
+
+function startPlacing(item: MediaItem) {
+  viewer.close();
+  gallery.close();
+  placing.start(item);
+  // show the item's current spot, if it has one, as a starting point
+  if (item.lat !== null && item.lon !== null) scene.control.flyTo(item.lat, item.lon);
+}
+
+placing.onChange = (item) => {
+  scene.pins.ghost = null;
+  scene.control.idleEnabled = !item;
+  scene.px.canvas.style.cursor = item ? 'crosshair' : '';
+  scene.invalidate();
+};
+
+async function placeAt(x: number, y: number) {
+  const item = placing.item;
+  const spot = item && unproject(scene.view, x, y);
+  if (!item || !spot) return;
+  const before = { lat: item.lat, lon: item.lon };
+  placing.cancel();
+  try {
+    store.upsert(await api.setLocation(item.id, spot.lat, spot.lon));
+    const place = await placeName([spot]);
+    toast.show(place ? `Placed in ${place}` : 'Placed', {
+      label: 'undo',
+      run: () => void api.setLocation(item.id, before.lat, before.lon).then((i) => store.upsert(i)),
+    });
+  } catch (err) {
+    toast.show(`Couldn't place it: ${(err as Error).message}`);
   }
 }
 
-addEventListener('resize', draw);
-draw();
+async function unplace(item: MediaItem) {
+  try {
+    store.upsert(await api.setLocation(item.id, null, null));
+    toast.show('Moved to unplaced', {
+      label: 'undo',
+      run: () => void api.setLocation(item.id, item.lat, item.lon).then((i) => store.upsert(i)),
+    });
+  } catch (err) {
+    toast.show(`Couldn't change it: ${(err as Error).message}`);
+  }
+}
 
-fetch('/api/config')
-  .then((res) => res.json())
-  .then((cfg: { title: string }) => (document.title = cfg.title))
-  .catch(() => {});
+async function remove(item: MediaItem) {
+  try {
+    await api.remove(item.id);
+    store.remove(item.id);
+    toast.show('Deleted');
+  } catch (err) {
+    toast.show(`Couldn't delete it: ${(err as Error).message}`);
+  }
+}
+
+viewer.actionsFor = (item) => [
+  item.lat === null
+    ? { label: 'place', icon: 'pin', run: startPlacing }
+    : { label: 'move', icon: 'pin', run: startPlacing },
+  ...(item.lat !== null ? [{ label: 'unplace', icon: 'unpin' as const, run: unplace }] : []),
+  { label: 'delete', icon: 'trash', run: remove, confirm: 'sure?', danger: true },
+];
+
+let hoverToken = 0;
+scene.onHover = (x, y) => {
+  if (placing.active) {
+    scene.pins.ghost = x < 0 ? null : unproject(scene.view, x, y);
+    scene.control.poke();
+    return;
+  }
+  const hit = x < 0 ? null : scene.pins.hitTest(x, y, 2);
+  if (hit?.cluster !== scene.pins.hovered?.cluster) {
+    scene.pins.hovered = hit;
+    scene.invalidate();
+    showHoverLabel(hit);
+  }
+  scene.px.canvas.style.cursor = hit ? 'pointer' : '';
+  if (hit) scene.control.poke();
+};
+
+function showHoverLabel(hit: PinHit | null) {
+  const token = ++hoverToken;
+  if (!hit || gallery.isOpen) {
+    hoverLabel.hidden = true;
+    return;
+  }
+  const items: MediaItem[] = hit.cluster.items;
+  hoverLabel.textContent = describeItems(items);
+  hoverLabel.hidden = false;
+  positionHoverLabel();
+  void placeName(items).then((place) => {
+    if (token === hoverToken && place) hoverLabel.textContent = `${place} · ${describeItems(items)}`;
+  });
+}
+
+function positionHoverLabel() {
+  const hit = scene.pins.hovered;
+  if (!hit || hoverLabel.hidden) return;
+  // follow the pin as the planet turns, using this frame's position
+  const live = scene.pins.hits.find((p) => p.cluster === hit.cluster);
+  if (!live) {
+    hoverLabel.hidden = true;
+    return;
+  }
+  const p = scene.px.toClient(live.x + 0.5, live.y - live.h - 1);
+  hoverLabel.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) translate(-50%, -100%)`;
+}
+scene.onFrame = positionHoverLabel;
+
+// ---------------------------------------------------------------- uploads
+
+uploader.onBatchDone = (added) => {
+  // show where the newest photo landed
+  const placed = added.filter((i) => i.lat !== null && i.lon !== null);
+  const last = placed[placed.length - 1];
+  if (last && !gallery.isOpen) scene.control.flyTo(last.lat!, last.lon!);
+};
+
+// ---------------------------------------------------------------- keys
+
+addEventListener('keydown', (e) => {
+  if (viewer.handleKey(e)) return e.preventDefault();
+  if (e.key === 'Escape') {
+    if (placing.active) placing.cancel();
+    else if (gallery.isOpen) gallery.close();
+    return;
+  }
+  // spin and zoom the planet from the keyboard when nothing else wants the keys
+  if (login.isOpen || (e.target instanceof HTMLElement && e.target.closest('input, .gallery'))) return;
+  const turn: Record<string, [number, number]> = {
+    ArrowLeft: [0, -60],
+    ArrowRight: [0, 60],
+    ArrowUp: [40, 0],
+    ArrowDown: [-40, 0],
+  };
+  if (turn[e.key]) {
+    scene.control.nudge(...turn[e.key]!);
+    e.preventDefault();
+  } else if (e.key === '+' || e.key === '=') scene.control.zoomBy(1.25);
+  else if (e.key === '-' || e.key === '_') scene.control.zoomBy(0.8);
+});
+
+void motion; // imported for its side effect of tracking prefers-reduced-motion
+
+// ---------------------------------------------------------------- start
+
+let appTitle = document.title;
+
+async function requireLogin() {
+  if (login.isOpen) return;
+  viewer.close();
+  gallery.close();
+  placing.cancel();
+  // lift the planet to make room for the form underneath
+  scene.setOffset(0, -scene.px.height * 0.1);
+  await login.show(appTitle);
+  scene.setOffset(0, 0);
+  await store.refresh();
+}
+auth.onUnauthorized = () => void requireLogin();
+
+async function start() {
+  const cfg = await api.config();
+  appTitle = cfg.title;
+  document.title = cfg.title;
+  title.textContent = cfg.title;
+  if (cfg.authRequired && !cfg.authenticated) await requireLogin();
+  else await store.refresh();
+  // open on the most recent memory
+  const latest = [...store.placed].sort((a, b) => ((a.takenAt ?? a.uploadedAt) < (b.takenAt ?? b.uploadedAt) ? 1 : -1))[0];
+  if (latest && scene.control.untouched) scene.control.flyTo(latest.lat, latest.lon, scene.control.zoom, 1.6);
+}
+start().catch((err) => {
+  console.error(err);
+  toast.show("Couldn't reach the planet. Is the server running?", undefined, 60_000);
+});
+
+Object.assign(window, { scene, store });

@@ -3,8 +3,12 @@
 # ---- build ----
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
-# If a native module (e.g. better-sqlite3) ever lacks a prebuilt binary for the
-# target platform, add: RUN apt-get update && apt-get install -y python3 make g++
+# better-sqlite3 ships prebuilt binaries, but npm still invokes node-gyp on its
+# binding.gyp (a no-op when a prebuild exists), which needs python3. The
+# compiler is there for platforms without a prebuild. Build stage only.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY server/package.json server/
 COPY web/package.json web/
@@ -26,6 +30,7 @@ COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server/package.json ./server/
 COPY --from=build /app/server/dist ./server/dist
+COPY --from=build /app/server/migrations ./server/migrations
 COPY --from=build /app/web/dist ./web/dist
 RUN mkdir -p /data && chown node:node /data
 USER node

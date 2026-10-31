@@ -29,9 +29,22 @@ npm run build        # build web then server
 npm start            # run the built app on :3000 (serves web/dist)
 npm run check        # typecheck + tests for all workspaces; must pass before committing
 docker compose up --build   # full production-like run on :8080
+npm run earth -w web # regenerate the planet's geography (committed output)
+npm run icons -w web # regenerate favicon/touch icon from the planet renderer
 ```
 
-In dev the server stores data in `./data` (git-ignored); in Docker it uses `/data`.
+In dev the server stores data in `server/data` (git-ignored); in Docker it uses `/data`.
+Pass `APP_PASSWORD=… PLANET_TITLE=…` to `npm run dev` to try login/title locally.
+
+## Where things live
+
+- `server/src/media/`: metadata (`metadata.ts`, `exif-blocks.ts`, `iso6709.ts`),
+  derived files (`derive.ts`), the job queue, DB access (`repo.ts`).
+- `server/src/auth.ts`: password + signed cookie. `server/migrations/*.sql`: schema.
+- `web/src/render/`: pixel canvas, palette, stars, planet ray-caster, pins.
+- `web/src/planet/`: sphere maths + clustering (`geo.ts`), motion (`control.ts`), map loading.
+- `web/src/ui/`: DOM bits (gallery/tray, viewer, upload, login, toasts).
+- `server/test/fixtures/make-fixtures.sh` regenerates the metadata fixtures.
 
 ## System dependencies
 
@@ -39,7 +52,8 @@ The server shells out to `ffmpeg`/`ffprobe` (video metadata, posters, transcodes
 and `heif-convert` (HEIC → JPEG). They're installed in the Docker image. For
 local dev without them, the code should degrade gracefully (log a warning, mark
 the derived file as missing) rather than crash. In a fresh Linux sandbox:
-`apt-get install -y ffmpeg libheif-examples`.
+`apt-get install -y ffmpeg libheif-examples` (on Ubuntu 24.04+/Debian trixie+ also
+`libheif-plugin-libde265`, or heif-convert can't decode HEIC).
 
 ## Conventions
 
