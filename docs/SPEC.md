@@ -186,7 +186,7 @@ Docker, and with `npm run check` passing.
 - [x] **M4 Starfield:** pixel-art sky, full-screen, crisp at any size/DPR.
 - [x] **M5 Planet:** software-rendered pixel planet with real geography,
       palette, dithered lighting, drag/inertia/idle spin/zoom.
-- [ ] **M6 Pins and gallery:** pins from `/api/media`, clustering, click to
+- [x] **M6 Pins and gallery:** pins from `/api/media`, clustering, click to
       centre and open gallery, full-screen viewer with video playback.
 - [ ] **M7 Unplaced tray and editing:** manual placement, delete.
 - [ ] **M8 Auth and personalisation:** `APP_PASSWORD`, login screen, `PLANET_TITLE`.

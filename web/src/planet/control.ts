@@ -73,6 +73,12 @@ export class PlanetControl {
     this.samples = [];
   }
 
+  /** Postpone idle spin (e.g. while the mouse rests on a pin). */
+  poke(): void {
+    this.sinceTouch = 0;
+    this.idleSpeed = 0;
+  }
+
   zoomBy(factor: number): void {
     this.zoom = clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
     this.sinceTouch = 0;

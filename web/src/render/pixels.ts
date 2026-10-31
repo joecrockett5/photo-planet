@@ -57,7 +57,12 @@ export class PixelCanvas {
   private applyCss() {
     this.canvas.style.width = `${this.width * this.cssPx}px`;
     this.canvas.style.height = `${this.height * this.cssPx}px`;
-    document.documentElement.style.setProperty('--px', `${this.cssPx}px`);
+    const root = document.documentElement.style;
+    root.setProperty('--px', `${this.cssPx}px`);
+    // UI text uses half-size pixels (still whole device pixels, so still crisp):
+    // at full art-pixel size the "tiny" title would be huge.
+    const dpr = this.devicePx / this.cssPx;
+    root.setProperty('--tpx', `${Math.max(1, Math.round(this.devicePx / 2)) / dpr}px`);
   }
 
   private watchDpr() {

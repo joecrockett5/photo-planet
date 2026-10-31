@@ -4,6 +4,7 @@ import { loadBiomes } from './planet/earth';
 import { PlanetControl } from './planet/control';
 import type { View } from './planet/geo';
 import { PixelCanvas } from './render/pixels';
+import { PinLayer } from './render/pins';
 import { PlanetRenderer } from './render/planet';
 import { Starfield } from './render/stars';
 
@@ -13,6 +14,7 @@ const CLOUD_SPEED = 0.8; // deg/s, relative to the ground
 export class Scene {
   readonly px: PixelCanvas;
   readonly control = new PlanetControl();
+  readonly pins = new PinLayer();
   private stars = new Starfield();
   private planet = new PlanetRenderer();
   private lastFrame = 0;
@@ -24,6 +26,7 @@ export class Scene {
   view: View = { lat: 0, lon: 0, cx: 0, cy: 0, r: 10 };
   onTap: ((x: number, y: number) => void) | null = null;
   onHover: ((x: number, y: number) => void) | null = null;
+  onFrame: ((view: View) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.px = new PixelCanvas(canvas);
@@ -109,6 +112,8 @@ export class Scene {
     const { buf, width: w, height: h } = this.px;
     this.stars.draw(buf, t, this.view.lon, this.view.lat, !reduced);
     this.planet.draw(buf, w, h, this.view, reduced ? 0 : t * CLOUD_SPEED);
+    this.pins.draw(buf, w, h, this.view, t, !reduced);
+    this.onFrame?.(this.view);
     this.px.present();
   }
 }
