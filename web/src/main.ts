@@ -357,4 +357,4 @@ start().catch((err) => {
   toast.show("Couldn't reach the planet. Is the server running?", undefined, 60_000);
 });
 
-Object.assign(window, { scene, store });
+Object.assign(window, { scene, store, viewer });

@@ -1,4 +1,11 @@
 :root {
+  /* Safe areas (notch, status bar, home indicator). On iOS home-screen apps
+     the page draws under the translucent status bar, so everything anchored
+     to an edge must add these. */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
   --px: 4px; /* CSS px per art pixel; set from JS */
   --tpx: 2px; /* CSS px per text pixel (Silkscreen is drawn on an 8px em) */
   --gap: calc(var(--px) * 3);
@@ -123,8 +130,8 @@ a:focus-visible {
 
 .title {
   position: fixed;
-  left: var(--gap);
-  top: var(--gap);
+  left: calc(var(--gap) + var(--sal));
+  top: calc(var(--gap) + var(--sat));
   color: var(--c-starMid);
   pointer-events: none;
   max-width: 60vw;
@@ -132,8 +139,8 @@ a:focus-visible {
 
 .cloud-toggle {
   position: fixed;
-  right: calc(var(--gap) - 14px);
-  top: calc(var(--gap) - 14px + env(safe-area-inset-top));
+  right: calc(var(--gap) - 14px + var(--sar));
+  top: calc(var(--gap) - 14px + var(--sat));
   color: var(--c-starDim);
 }
 .cloud-toggle[aria-pressed='true'] {
@@ -148,8 +155,8 @@ body.placing-mode .cloud-toggle {
 
 .upload {
   position: fixed;
-  right: calc(var(--gap) - 14px);
-  bottom: calc(var(--gap) - 14px + env(safe-area-inset-bottom));
+  right: calc(var(--gap) - 14px + var(--sar));
+  bottom: calc(var(--gap) - 14px + var(--sab));
   display: flex;
   align-items: center;
   gap: var(--px);
@@ -164,7 +171,7 @@ body.placing-mode .cloud-toggle {
 .upload-bar {
   position: fixed;
   left: 0;
-  bottom: 0;
+  bottom: var(--sab);
   height: var(--px);
   width: calc(var(--progress, 0) * 100%);
   background: var(--c-pin);
@@ -232,7 +239,12 @@ body.dropping::after {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: var(--gap) 0 var(--px) var(--gap);
+  padding: var(--gap) var(--sar) var(--px) calc(var(--gap) + var(--sal));
+}
+@media (min-width: 720px) {
+  .gallery-head {
+    padding-top: calc(var(--gap) + var(--sat));
+  }
 }
 .gallery-head > div {
   padding-top: var(--px);
@@ -247,7 +259,7 @@ body.dropping::after {
 .gallery-grid {
   flex: 1;
   overflow-y: auto;
-  padding: 0 var(--gap) var(--gap);
+  padding: 0 calc(var(--gap) + var(--sar)) calc(var(--gap) + var(--sab)) calc(var(--gap) + var(--sal));
   scrollbar-width: thin;
   scrollbar-color: var(--c-starDim) transparent;
   overscroll-behavior: contain;
@@ -316,19 +328,29 @@ body.dropping::after {
 .viewer-stage {
   flex: 1;
   min-height: 0;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: calc(var(--gap) + 44px) var(--gap) 0;
+  padding: var(--stage-top) var(--stage-right) 0 var(--stage-left);
   touch-action: pan-y pinch-zoom;
+  --stage-top: calc(var(--gap) + 44px + var(--sat));
+  --stage-left: calc(var(--gap) + var(--sal));
+  --stage-right: calc(var(--gap) + var(--sar));
 }
+/* Sized explicitly against the stage, not with max-height: 100%, which iOS
+   Safari ignores inside a flex item: tall photos would overflow the screen. */
 .viewer-media {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
+  position: absolute;
+  top: var(--stage-top);
+  left: var(--stage-left);
+  width: calc(100% - var(--stage-left) - var(--stage-right));
+  height: calc(100% - var(--stage-top));
   object-fit: contain;
   user-select: none;
+  -webkit-user-select: none;
   -webkit-user-drag: none;
+  -webkit-touch-callout: none;
 }
 .viewer-missing {
   color: var(--c-starMid);
@@ -348,8 +370,9 @@ body.dropping::after {
 }
 .viewer-close {
   position: absolute;
-  top: calc(var(--gap) - 14px);
-  right: calc(var(--gap) - 14px);
+  top: calc(var(--gap) - 14px + var(--sat));
+  right: calc(var(--gap) - 14px + var(--sar));
+  z-index: 1;
 }
 .viewer-prev,
 .viewer-next {
@@ -360,10 +383,10 @@ body.dropping::after {
   min-height: 88px;
 }
 .viewer-prev {
-  left: calc(var(--px) * 1);
+  left: calc(var(--px) + var(--sal));
 }
 .viewer-next {
-  right: calc(var(--px) * 1);
+  right: calc(var(--px) + var(--sar));
 }
 @media (pointer: coarse) {
   /* swipe instead */
@@ -378,7 +401,7 @@ body.dropping::after {
   align-items: center;
   justify-content: space-between;
   gap: var(--px) var(--gap);
-  padding: var(--px) var(--gap) calc(var(--gap) + env(safe-area-inset-bottom));
+  padding: var(--px) calc(var(--gap) + var(--sar)) calc(var(--gap) + var(--sab)) calc(var(--gap) + var(--sal));
 }
 .viewer-caption {
   display: inline;
@@ -413,7 +436,7 @@ body.dropping::after {
   align-items: center;
   justify-content: space-between;
   gap: var(--px);
-  padding: var(--px) calc(var(--gap) - var(--tpx) * 2) calc(var(--px) + env(safe-area-inset-bottom)) var(--gap);
+  padding: var(--px) calc(var(--gap) - var(--tpx) * 2 + var(--sar)) calc(var(--px) + var(--sab)) calc(var(--gap) + var(--sal));
   border-top: var(--px) solid var(--c-starDim);
   color: var(--c-starMid);
 }
@@ -426,6 +449,9 @@ body.dropping::after {
 .gallery-place:disabled {
   color: var(--c-starDim);
   cursor: default;
+}
+.gallery.selecting .gallery-grid {
+  padding-bottom: var(--gap); /* the action bar takes the home-indicator space */
 }
 .gallery.selecting .thumb img {
   opacity: 0.55;
@@ -463,15 +489,15 @@ body.dropping::after {
 
 .unplaced {
   position: fixed;
-  left: calc(var(--gap) - calc(var(--tpx) * 2));
-  bottom: calc(var(--gap) - calc(var(--tpx) * 3) + env(safe-area-inset-bottom));
+  left: calc(var(--gap) - calc(var(--tpx) * 2) + var(--sal));
+  bottom: calc(var(--gap) - calc(var(--tpx) * 3) + var(--sab));
 }
 
 .placing {
   position: fixed;
-  left: var(--gap);
-  right: var(--gap);
-  top: var(--gap);
+  left: calc(var(--gap) + var(--sal));
+  right: calc(var(--gap) + var(--sar));
+  top: calc(var(--gap) + var(--sat));
   width: min(26em, 100%);
   margin: 0 auto;
   background: var(--c-space);
@@ -540,7 +566,7 @@ body.dropping::after {
   list-style: none;
   margin: 0;
   padding: 0 0 var(--px);
-  max-height: min(50vh, 22em);
+  max-height: min(45vh, 45dvh, 22em);
   overflow-y: auto;
 }
 .placing-option {
@@ -571,10 +597,10 @@ body.placing-mode .title {
 
 .toast {
   position: fixed;
-  left: var(--gap);
-  right: var(--gap);
+  left: calc(var(--gap) + var(--sal));
+  right: calc(var(--gap) + var(--sar));
   /* above the bottom corners (counter and +) */
-  bottom: calc(var(--gap) + 40px + env(safe-area-inset-bottom));
+  bottom: calc(var(--gap) + 40px + var(--sab));
   width: fit-content;
   margin: 0 auto;
   display: flex;
@@ -598,9 +624,9 @@ body.locked .viewer {
 }
 .login {
   position: fixed;
-  left: var(--gap);
-  right: var(--gap);
-  bottom: max(6vh, calc(var(--gap) + env(safe-area-inset-bottom)));
+  left: calc(var(--gap) + var(--sal));
+  right: calc(var(--gap) + var(--sar));
+  bottom: max(6vh, calc(var(--gap) + var(--sab)));
   width: fit-content;
   margin: 0 auto;
   display: flex;
@@ -666,9 +692,9 @@ body.locked .viewer {
 
 .empty-hint {
   position: fixed;
-  left: var(--gap);
-  right: var(--gap);
-  bottom: calc(var(--gap) + 52px + env(safe-area-inset-bottom));
+  left: calc(var(--gap) + var(--sal));
+  right: calc(var(--gap) + var(--sar));
+  bottom: calc(var(--gap) + 52px + var(--sab));
   text-align: center;
   color: var(--c-starMid);
   pointer-events: none;
@@ -696,6 +722,3 @@ body.locked .viewer {
   }
 }
 
-.title {
-  padding-top: env(safe-area-inset-top);
-}

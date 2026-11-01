@@ -16,11 +16,25 @@ export class PixelCanvas {
   buf!: Uint32Array;
   onResize: (() => void) | null = null;
 
+  /**
+   * A fixed, full-screen, invisible element we measure for the screen size.
+   * window.innerHeight can't be trusted: iOS home-screen apps with a
+   * translucent status bar report it without the status bar while the page
+   * starts underneath it, which left a strip of bare background at the bottom.
+   */
+  private sizer: HTMLElement;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: false })!;
+    this.sizer = document.createElement('div');
+    this.sizer.setAttribute('aria-hidden', 'true');
+    this.sizer.style.cssText = 'position:fixed;inset:0;visibility:hidden;pointer-events:none;';
+    document.body.prepend(this.sizer);
     this.resize();
     addEventListener('resize', () => this.resize());
+    // also catches iOS toolbars and the status bar settling after launch
+    new ResizeObserver(() => this.resize()).observe(this.sizer);
     this.watchDpr();
   }
 
@@ -34,8 +48,9 @@ export class PixelCanvas {
 
   resize(): void {
     const dpr = window.devicePixelRatio || 1;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const rect = this.sizer.getBoundingClientRect();
+    const vw = Math.max(rect.width, window.innerWidth);
+    const vh = Math.max(rect.height, window.innerHeight);
     this.devicePx = Math.max(1, Math.round(PixelCanvas.cssScaleFor(vw, vh) * dpr));
     this.cssPx = this.devicePx / dpr;
     const w = Math.ceil((vw * dpr) / this.devicePx);

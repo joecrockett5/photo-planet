@@ -42,9 +42,11 @@ export class Viewer {
     );
     parent.append(this.el);
 
-    // tap on the backdrop (not the photo) closes
+    // tap on the backdrop (not the photo) closes; the photo element spans the
+    // stage with object-fit: contain, so its letterbox counts as backdrop too
     this.stage.addEventListener('click', (e) => {
-      if (e.target === this.stage) this.close();
+      const t = e.target;
+      if (t === this.stage || (t instanceof HTMLImageElement && !insideContent(t, e.clientX, e.clientY))) this.close();
     });
     this.attachSwipe();
   }
@@ -200,4 +202,16 @@ export class Viewer {
     });
     this.stage.addEventListener('pointercancel', () => (tracking = false));
   }
+}
+
+/** Whether a point is on the visible picture of an object-fit: contain image. */
+function insideContent(img: HTMLImageElement, x: number, y: number): boolean {
+  const box = img.getBoundingClientRect();
+  if (!img.naturalWidth || !img.naturalHeight) return true;
+  const scale = Math.min(box.width / img.naturalWidth, box.height / img.naturalHeight);
+  const w = img.naturalWidth * scale;
+  const h = img.naturalHeight * scale;
+  const left = box.left + (box.width - w) / 2;
+  const top = box.top + (box.height - h) / 2;
+  return x >= left && x <= left + w && y >= top && y <= top + h;
 }
