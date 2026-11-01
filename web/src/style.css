@@ -137,19 +137,23 @@ a:focus-visible {
   max-width: 60vw;
 }
 
-.cloud-toggle {
+.corner-buttons {
   position: fixed;
   right: calc(var(--gap) - 14px + var(--sar));
   top: calc(var(--gap) - 14px + var(--sat));
+  display: flex;
+}
+.corner-buttons .icon-button {
+  min-width: 36px; /* two side by side, still easy to hit */
   color: var(--c-starDim);
 }
-.cloud-toggle[aria-pressed='true'] {
+.corner-buttons .icon-button[aria-pressed='true'] {
   color: var(--c-starMid);
 }
-.cloud-toggle:hover {
+.corner-buttons .icon-button:hover {
   color: var(--c-starBright);
 }
-body.placing-mode .cloud-toggle {
+body.placing-mode .corner-buttons {
   visibility: hidden;
 }
 
@@ -416,10 +420,8 @@ body.dropping::after {
   margin-right: calc(var(--tpx) * -2);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  * {
-    transition: none !important;
-  }
+html.reduce-motion * {
+  transition: none !important;
 }
 
 /* ------------------------------------------------------------------ M7: tray, placing, toast */
@@ -682,10 +684,9 @@ body.locked .viewer {
     transform: translateX(calc(var(--px) * 2));
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .login.shake {
-    animation: none;
-  }
+html.reduce-motion .login.shake,
+html.reduce-motion .viewer-stage.loading::before {
+  animation: none;
 }
 
 /* ------------------------------------------------------------------ M9: polish */

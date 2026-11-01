@@ -15,7 +15,9 @@ Self-hosted, one Docker container, all data in one volume. Made as a gift.
   *delete* anything from the viewer.
 - **Zoom right in** (scroll or pinch towards a spot) until neighbouring towns
   get their own pins. Clouds part over your photos; the little cloud button
-  top-right brings them back everywhere.
+  top-right brings them back everywhere. The planet and sky start still; the
+  twinkle button beside it switches on twinkling stars, drifting clouds and a
+  slowly turning planet.
 - **Private** behind one shared password, if you set one.
 
 See [docs/SPEC.md](docs/SPEC.md) for the full design.
