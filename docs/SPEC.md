@@ -130,7 +130,13 @@ chrome, lots of space, the planet as the centrepiece.
   a limited palette shared by planet, stars and UI accents.
 - **Motion.** Slow and calm. Easing on rotation, stepped animation for
   twinkles and pins (pixel art moves in steps).
-- Respect `prefers-reduced-motion` (no auto-rotation, no twinkling).
+- **Reduce motion is an in-app setting, on by default** (a small twinkle
+  button top right, next to the clouds button; remembered per device). On: no
+  idle rotation, twinkling, cloud drift, shooting stars or pin blinking, and
+  fly-to is instant. Off: all of that, for people who like it. Dragging and
+  the fling after letting go work either way (the user's own gesture). This
+  replaces following the OS `prefers-reduced-motion` setting: with the
+  default already "reduce", an explicit in-app choice is clearer.
 
 ## Technical architecture
 
@@ -279,6 +285,14 @@ deliberately differs. Revisit any of them freely.
   like Google Earth; stopping before letting go means no fling. This is kept
   with reduced motion, since it's the direct result of the user's gesture;
   reduced motion still stops idle spin, twinkles, clouds and shooting stars.
+- **Phones / iOS home-screen app:** the page draws under the translucent
+  status bar (`viewport-fit=cover`), so every edge-anchored element adds the
+  safe-area insets (CSS vars `--sat/--sab/--sal/--sar`, also covering
+  landscape notches). The canvas is sized from a fixed full-screen element
+  rather than `innerHeight`, which iOS reports without the status bar there.
+  Viewer media is sized explicitly (absolute + `object-fit: contain`) because
+  iOS Safari ignores `max-height: 100%` inside a flex item, letting tall
+  photos run off the top; a tap on the letterbox still closes the viewer.
 - **Keyboard:** arrow keys spin, `+`/`-` zoom, Esc closes things, ←/→ in the viewer.
 
 ## Non-goals (v1)

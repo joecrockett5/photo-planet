@@ -62,7 +62,25 @@ function toggleClouds() {
   toast.show(clearClouds ? 'Clouds part over your photos' : 'Clouds everywhere', undefined, 2500);
 }
 renderCloudButton();
-ui.append(cloudButton);
+
+// ---------------------------------------------------------------- reduce motion
+
+const motionButton = h('button.icon-button.motion-toggle', { onclick: () => motion.set(!motion.reduced) }, icon('twinkle'));
+function renderMotionButton() {
+  motionButton.setAttribute('aria-pressed', String(motion.reduced));
+  const label = motion.reduced
+    ? 'Reduce motion is on: a still planet and sky (tap for twinkling stars and a slowly turning planet)'
+    : 'Reduce motion is off (tap to keep the planet and sky still)';
+  motionButton.setAttribute('aria-label', label);
+  motionButton.title = label;
+}
+motion.onChange((reduced) => {
+  renderMotionButton();
+  scene.invalidate();
+  toast.show(reduced ? 'Reduce motion on: a still planet and sky' : 'Motion on: twinkling stars, drifting clouds, a turning planet', undefined, 2500);
+});
+renderMotionButton();
+ui.append(h('div.corner-buttons', {}, motionButton, cloudButton));
 const coarse = matchMedia('(pointer: coarse)').matches;
 const emptyHint = h(
   'p.empty-hint',
@@ -322,7 +340,6 @@ addEventListener('keydown', (e) => {
   else if (e.key === '-' || e.key === '_') scene.control.zoomBy(0.8);
 });
 
-void motion; // imported for its side effect of tracking prefers-reduced-motion
 
 // ---------------------------------------------------------------- start
 
@@ -357,4 +374,4 @@ start().catch((err) => {
   toast.show("Couldn't reach the planet. Is the server running?", undefined, 60_000);
 });
 
-Object.assign(window, { scene, store });
+Object.assign(window, { scene, store, viewer });
