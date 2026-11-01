@@ -21,7 +21,7 @@ const planet = new PlanetRenderer(map);
 function render(size: number, r: number, background: number | null): Uint32Array {
   const buf = new Uint32Array(size * size).fill(background ?? 0);
   const c = size / 2;
-  planet.draw(buf, size, size, { lat: 18, lon: 12, cx: c, cy: c, r }, null);
+  planet.draw(buf, size, size, { lat: 18, lon: 12, cx: c, cy: c, r }, { cloudLon: null });
   return buf;
 }
 

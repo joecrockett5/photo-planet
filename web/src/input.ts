@@ -4,7 +4,8 @@ export interface InputHandlers {
   dragStart(): void;
   drag(dxArt: number, dyArt: number, now: number): void;
   dragEnd(now: number): void;
-  zoom(factor: number): void;
+  /** Zoom by `factor`, keeping the point under (x, y) (art px) in place. */
+  zoom(factor: number, x: number, y: number): void;
   /** A tap/click that didn't move: art-pixel coordinates. */
   tap(x: number, y: number): void;
   hover(x: number, y: number): void;
@@ -67,7 +68,10 @@ export function attachInput(px: PixelCanvas, h: InputHandlers): void {
     h.drag((after.x - before.x) / px.cssPx, (after.y - before.y) / px.cssPx, performance.now());
     if (pointers.size >= 2) {
       const d = spread();
-      if (pinchDist > 0 && d > 0) h.zoom(d / pinchDist);
+      if (pinchDist > 0 && d > 0) {
+        const c = px.toArt(after.x, after.y);
+        h.zoom(d / pinchDist, c.x, c.y);
+      }
       pinchDist = d;
     }
   });
@@ -99,7 +103,8 @@ export function attachInput(px: PixelCanvas, h: InputHandlers): void {
       e.preventDefault();
       const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
       // trackpad pinch arrives as ctrl+wheel with small deltas
-      h.zoom(Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0015)));
+      const at = px.toArt(e.clientX, e.clientY);
+      h.zoom(Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.002)), at.x, at.y);
     },
     { passive: false },
   );

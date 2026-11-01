@@ -10,6 +10,7 @@ const FLING_STALE = 60; // ms: if the pointer had stopped this long before relea
 const MAX_SPIN = 600; // deg/s
 const MAX_LAT = 80;
 export const MIN_ZOOM = 0.7;
+/** Default zoom limit; the scene raises it so the planet can grow to a fixed size in art px. */
 export const MAX_ZOOM = 3.4;
 
 /**
@@ -59,6 +60,8 @@ export class PlanetControl {
   private dragging = false;
   private flight: Flight | null = null;
   private samples: { t: number; dLat: number; dLon: number }[] = [];
+  /** Upper zoom limit (set by the scene from the screen size). */
+  maxZoom = MAX_ZOOM;
   /** When false (reduced motion, or a panel is open), no idle spin. */
   idleEnabled = true;
   /**
@@ -111,13 +114,22 @@ export class PlanetControl {
 
   zoomBy(factor: number): void {
     this.touched = true;
-    this.zoom = clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+    this.zoom = clamp(this.zoom * factor, MIN_ZOOM, this.maxZoom);
     this.sinceTouch = 0;
     this.version++;
   }
 
-  /** Keyboard nudge: a short spin in a direction (degrees/second impulse). */
+  /** Keep a point under the pointer while zooming: shift the view by this much. */
+  shift(dLat: number, dLon: number): void {
+    this.lat = clamp(this.lat + dLat, -MAX_LAT, MAX_LAT);
+    this.lon = wrapLon(this.lon + dLon);
+    this.version++;
+  }
+
+  /** Keyboard nudge: a short spin in a direction (degrees/second impulse, scaled down when zoomed in). */
   nudge(dLat: number, dLon: number): void {
+    dLat /= Math.max(1, this.zoom);
+    dLon /= Math.max(1, this.zoom);
     this.touched = true;
     this.flight = null;
     this.sinceTouch = 0;
@@ -127,7 +139,7 @@ export class PlanetControl {
   }
 
   setZoom(z: number): void {
-    this.zoom = clamp(z, MIN_ZOOM, MAX_ZOOM);
+    this.zoom = clamp(z, MIN_ZOOM, this.maxZoom);
     this.sinceTouch = 0;
     this.version++;
   }
@@ -144,7 +156,7 @@ export class PlanetControl {
       dLat: toLat - this.lat,
       dLon: lonDelta(this.lon, lon),
       fromZoom: this.zoom,
-      toZoom: clamp(zoom, MIN_ZOOM, MAX_ZOOM),
+      toZoom: clamp(zoom, MIN_ZOOM, this.maxZoom),
       t: 0,
       duration,
     };
@@ -181,9 +193,11 @@ export class PlanetControl {
       if (Math.abs(this.vLon) < 0.05) this.vLon = 0;
       if (Math.abs(this.vLat) < 0.05) this.vLat = 0;
       // ease the idle spin in and out rather than snapping
-      const target = this.idleEnabled && !reducedMotion && this.sinceTouch > IDLE_DELAY ? IDLE_SPEED : 0;
+      // the same gentle drift on screen at any zoom: slower in degrees when zoomed in
+      const idle = IDLE_SPEED / Math.max(1, this.zoom);
+      const target = this.idleEnabled && !reducedMotion && this.sinceTouch > IDLE_DELAY ? idle : 0;
       this.idleSpeed += (target - this.idleSpeed) * Math.min(1, dt * 0.8);
-      if (Math.abs(this.idleSpeed) < 0.01 && target === 0) this.idleSpeed = 0;
+      if (Math.abs(this.idleSpeed) < 0.001 && target === 0) this.idleSpeed = 0;
       this.lon = wrapLon(this.lon + (this.vLon + this.idleSpeed) * dt);
       this.lat = clamp(this.lat + this.vLat * dt, -MAX_LAT, MAX_LAT);
       if (Math.abs(this.lat) >= MAX_LAT) this.vLat = 0;

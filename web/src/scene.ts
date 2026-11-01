@@ -2,13 +2,18 @@ import { attachInput } from './input';
 import { motion } from './motion';
 import { loadBiomes } from './planet/earth';
 import { PlanetControl } from './planet/control';
-import { UnwrappedLon, type View } from './planet/geo';
+import { lonDelta, unproject, UnwrappedLon, type View } from './planet/geo';
 import { PixelCanvas } from './render/pixels';
 import { PinLayer } from './render/pins';
 import { PlanetRenderer } from './render/planet';
 import { Starfield } from './render/stars';
 
 const CLOUD_SPEED = 0.8; // deg/s, relative to the ground
+/**
+ * Deepest zoom, as a planet radius in art px (whatever the screen): enough
+ * that places ~20km apart (Tokyo and Yokohama) get separate pins.
+ */
+const MAX_RADIUS = 2600;
 
 /** Owns the canvas and the frame loop: sky, planet and (later) pins. */
 export class Scene {
@@ -23,6 +28,7 @@ export class Scene {
   private mapReady = false;
   private lastDraw = 0;
   private drawnVersion = -1;
+  private clearings: Uint8Array | null = null;
   /** Continuous longitude for star parallax (no jump at ±180°). */
   private skyLon = new UnwrappedLon();
   private dirty = true;
@@ -53,11 +59,30 @@ export class Scene {
       dragStart: () => this.control.startDrag(),
       drag: (dx, dy, now) => this.control.dragBy(dx, dy, this.view.r, now),
       dragEnd: (now) => this.control.endDrag(now),
-      zoom: (f) => this.control.zoomBy(f),
+      zoom: (f, x, y) => this.zoomAt(f, x, y),
       tap: (x, y) => this.onTap?.(x, y),
       hover: (x, y) => this.onHover?.(x, y),
     });
     requestAnimationFrame((t) => this.frame(t));
+  }
+
+  /** Zoom, keeping the spot under (x, y) art px where it is (like Google Earth). */
+  zoomAt(factor: number, x: number, y: number): void {
+    const before = unproject(this.computeView(), x, y);
+    this.control.zoomBy(factor);
+    if (!before) return; // pointer off the planet: zoom about the centre
+    // two passes: the correction is a small rotation, nearly linear
+    for (let i = 0; i < 2; i++) {
+      const after = unproject(this.computeView(), x, y);
+      if (!after) return;
+      this.control.shift(before.lat - after.lat, lonDelta(after.lon, before.lon));
+    }
+  }
+
+  /** Clear clouds around these spots (photos), or null to leave the sky alone. */
+  setClearings(spots: { lat: number; lon: number }[] | null): void {
+    this.clearings = spots && spots.length ? PlanetRenderer.clearingsFor(spots) : null;
+    this.dirty = true;
   }
 
   invalidate(): void {
@@ -93,6 +118,7 @@ export class Scene {
     this.lastFrame = now;
     const reduced = motion.reduced;
 
+    this.control.maxZoom = Math.max(3.4, MAX_RADIUS / this.baseRadius());
     this.control.update(dt, reduced);
     // Redraw for any orientation/zoom change, including ones made by input
     // handlers since the last frame (drags), not just by update().
@@ -128,7 +154,13 @@ export class Scene {
     const { buf, width: w, height: h } = this.px;
     this.stars.draw(buf, t, this.skyLon.update(this.view.lon), this.view.lat, !reduced);
     const reveal = Math.ceil(this.reveal * 8) / 8;
-    if (reveal > 0) this.planet.draw(buf, w, h, this.view, reduced ? 0 : t * CLOUD_SPEED, reveal);
+    if (reveal > 0) {
+      this.planet.draw(buf, w, h, this.view, {
+        cloudLon: reduced ? 0 : t * CLOUD_SPEED,
+        reveal,
+        clearings: this.clearings,
+      });
+    }
     if (reveal >= 1) this.pins.draw(buf, w, h, this.view, t, !reduced);
     this.onFrame?.(this.view);
     this.px.present();

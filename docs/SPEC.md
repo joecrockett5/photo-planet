@@ -212,12 +212,26 @@ deliberately differs. Revisit any of them freely.
   DPR). UI *text* (Silkscreen) is drawn at half that scale, still whole device
   pixels so it stays crisp, because at full scale the "tiny" title would be
   ~20px tall.
-- **Biomes are painted, not measured.** Land/ocean, coastlines and country
-  borders are real Natural Earth 1:50m data. Biomes (desert, forest, ice, rock)
+- **Biomes are painted, not measured.** Land/ocean and coastlines are real
+  Natural Earth 1:10m data (country borders 1:50m). Biomes (desert, forest, ice, rock)
   are hand-placed regions with noisy edges plus latitude belts, the Andes
   traced along South America's Pacific coast, and shallow water from distance
   to land. There is no elevation or climate data. The map is a committed
-  2048×1024 RLE file made by `web/scripts/make-earth.ts`.
+  4096×2048 RLE file (~240KB) made by `web/scripts/make-earth.ts`. At normal
+  zoom the renderer samples a half-resolution copy (full detail would only add
+  speckle); zoomed past the map's own detail it nudges samples with smooth
+  noise so coastlines come out irregular rather than as square steps.
+- **Deep zoom.** The zoom limit is a planet radius of 2600 art px whatever the
+  screen (≈39× on desktop, ≈52× on a phone), enough for places ~20km apart to
+  get separate pins (Kyoto and Osaka; Tokyo and Yokohama). Wheel and pinch zoom
+  towards the pointer, keeping the spot under it in place, like Google Earth.
+  Idle spin and arrow-key nudges slow down in proportion as you zoom in.
+- **Clouds** thin out (ordered dither) as you zoom in, gone by a radius of
+  ~560 art px, as if you've dropped below them. By default they also part
+  around places with photos: a ground-fixed clearing ~4° across with a
+  dithered edge, so drifting clouds flow around your pins. A small pixel cloud
+  button (top right) switches that off ("clouds everywhere"); the choice is
+  remembered per device in localStorage.
 - **Lighting** is a fixed key light from the upper left (not the real sun), so
   the dithered terminator stays still while the globe turns.
 - **Place names** are offline and town-level, worked out on the server and
