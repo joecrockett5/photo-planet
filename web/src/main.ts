@@ -9,6 +9,7 @@ import type { PinHit, PlacedItem } from './render/pins';
 import { Scene } from './scene';
 import { store } from './store';
 import { h } from './ui/dom';
+import { icon } from './ui/icons';
 import { Gallery } from './ui/gallery';
 import { Login } from './ui/login';
 import { Placing } from './ui/placing';
@@ -27,6 +28,41 @@ const hoverLabel = h('div.pin-label', { hidden: true });
 ui.append(title, hoverLabel);
 
 const unplacedButton = h('button.text-button.unplaced', { hidden: true, onclick: () => openTray() });
+
+// ---------------------------------------------------------------- clouds over photos
+
+/** Whether the clouds part over places with photos. Remembered per device; on by default. */
+const CLEAR_KEY = 'photo-planet:clear-clouds';
+let clearClouds = (() => {
+  try {
+    return localStorage.getItem(CLEAR_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+})();
+const cloudButton = h('button.icon-button.cloud-toggle', { onclick: () => toggleClouds() }, icon('cloud'));
+function renderCloudButton() {
+  cloudButton.setAttribute('aria-pressed', String(clearClouds));
+  const label = clearClouds ? 'Clouds part over your photos (tap to keep them everywhere)' : 'Clouds everywhere (tap to clear them over your photos)';
+  cloudButton.setAttribute('aria-label', label);
+  cloudButton.title = label;
+}
+function applyClearings() {
+  scene.setClearings(clearClouds ? store.placed : null);
+}
+function toggleClouds() {
+  clearClouds = !clearClouds;
+  try {
+    localStorage.setItem(CLEAR_KEY, clearClouds ? 'on' : 'off');
+  } catch {
+    // private mode: just don't remember
+  }
+  renderCloudButton();
+  applyClearings();
+  toast.show(clearClouds ? 'Clouds part over your photos' : 'Clouds everywhere', undefined, 2500);
+}
+renderCloudButton();
+ui.append(cloudButton);
 const coarse = matchMedia('(pointer: coarse)').matches;
 const emptyHint = h(
   'p.empty-hint',
@@ -46,6 +82,7 @@ const login = new Login(document.body);
 
 store.subscribe((items) => {
   scene.pins.setItems(store.placed);
+  applyClearings();
   const unplaced = store.unplaced.length;
   unplacedButton.hidden = unplaced === 0;
   unplacedButton.textContent = `${unplaced} unplaced`;

@@ -9,7 +9,13 @@ const at = (lat: number, lon: number) =>
 const LAND = [BIOME.beach, BIOME.grass, BIOME.forest, BIOME.desert, BIOME.rock, BIOME.ice];
 
 describe('earth map', () => {
-  it('is 2048x1024', () => expect([map.width, map.height]).toEqual([2048, 1024]));
+  it('is 4096x2048', () => expect([map.width, map.height]).toEqual([4096, 2048]));
+  it('has detail that a coarser map would miss', () => {
+    // Tokyo Bay is water, the Izu peninsula beside it is land; the Strait of Gibraltar is open
+    expect([BIOME.deep, BIOME.shallow]).toContain(at(35.45, 139.85));
+    expect(LAND).toContain(at(34.9, 138.95));
+    expect([BIOME.deep, BIOME.shallow]).toContain(at(35.96, -5.6));
+  });
   it.each([
     ['Paris', 48.86, 2.35],
     ['Nairobi', -1.29, 36.82],

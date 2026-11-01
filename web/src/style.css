@@ -130,6 +130,22 @@ a:focus-visible {
   max-width: 60vw;
 }
 
+.cloud-toggle {
+  position: fixed;
+  right: calc(var(--gap) - 14px);
+  top: calc(var(--gap) - 14px + env(safe-area-inset-top));
+  color: var(--c-starDim);
+}
+.cloud-toggle[aria-pressed='true'] {
+  color: var(--c-starMid);
+}
+.cloud-toggle:hover {
+  color: var(--c-starBright);
+}
+body.placing-mode .cloud-toggle {
+  visibility: hidden;
+}
+
 .upload {
   position: fixed;
   right: calc(var(--gap) - 14px);

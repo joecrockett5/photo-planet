@@ -13,6 +13,9 @@ Self-hosted, one Docker container, all data in one volume. Made as a gift.
 - **No location?** The item waits in the "unplaced" tray until you open it,
   choose *place* and tap the spot on the planet. You can *move*, *unplace* or
   *delete* anything from the viewer.
+- **Zoom right in** (scroll or pinch towards a spot) until neighbouring towns
+  get their own pins. Clouds part over your photos; the little cloud button
+  top-right brings them back everywhere.
 - **Private** behind one shared password, if you set one.
 
 See [docs/SPEC.md](docs/SPEC.md) for the full design.

@@ -1,7 +1,7 @@
 /**
  * Rasterise Natural Earth geography (from the `world-atlas` package) into the
  * small equirectangular maps the planet renderer samples:
- *   - earth-biomes.bin: a biome index per texel (ocean depth, beach, grass,
+ *   - earth-biomes.bin (4096x2048, from Natural Earth 1:10m land): a biome index per texel (ocean depth, beach, grass,
  *     forest, desert, rock/tundra, ice). Land/ocean is real data; biomes are
  *     hand-placed regions with noisy edges, which is plenty at pixel-art scale.
  * (Country rasterisation here only steers biomes, e.g. Greenland's ice. Place
@@ -18,8 +18,10 @@ import { BIOME, encodeRle } from '../src/planet/earth-format';
 import { fillPolygon, polygonsOf } from './raster';
 
 const require = createRequire(import.meta.url);
-const W = 2048;
-const H = 1024;
+const W = 4096;
+const H = 2048;
+/** Distances below are in texels of the original 2048-wide map: scale them. */
+const S = W / 2048;
 const outDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/planet');
 
 /**
@@ -54,7 +56,7 @@ function distanceTo(isSource: (i: number) => boolean, max: number): Uint8Array {
 // ---------------------------------------------------------------- land + countries
 
 const land = new Uint8Array(W * H);
-const landTopo = JSON.parse(readFileSync(require.resolve('world-atlas/land-50m.json'), 'utf8'));
+const landTopo = JSON.parse(readFileSync(require.resolve('world-atlas/land-10m.json'), 'utf8'));
 for (const f of (feature(landTopo, landTopo.objects.land) as unknown as { features: { geometry: never }[] }).features)
   for (const poly of polygonsOf(f.geometry)) fillPolygon(land, W, H, poly, 1);
 
@@ -132,7 +134,7 @@ function biomeFor(lat: number, lon: number, coast: number, i: number): number {
   const alat = Math.abs(lat);
   // ice caps: Antarctica, Greenland's interior, the high Arctic
   if (lat < -61) return BIOME.ice;
-  if (countries[i] === greenlandId && coast > 2 + n * 4) return BIOME.ice;
+  if (countries[i] === greenlandId && coast > (2 + n * 4) * S) return BIOME.ice;
   if (lat > 78 + n * 3) return BIOME.ice;
   // tundra / bare rock in the far north and on the Tibetan plateau
   if (lat > 66 + n * 5) return BIOME.rock;
@@ -151,7 +153,7 @@ function biomeFor(lat: number, lon: number, coast: number, i: number): number {
   }
   for (const [a, b, c, d] of DESERTS) if (region(lat, lon, a, b, c, d) > 0) return BIOME.desert;
   // sandy coasts in warm latitudes
-  if (coast <= 2 && alat < 38 && n > 0.45) return BIOME.beach;
+  if (coast <= 0.5 * S && alat < 38 && n > 0.45) return BIOME.beach;
   for (const [a, b, c, d] of FORESTS) if (region(lat, lon, a, b, c, d) > 0) return BIOME.forest;
   // boreal forest belt, and patchy temperate forest
   if (lat > 46 + n * 7 && lat < 64 + n * 3 && n > 0.38) return BIOME.forest;
@@ -159,8 +161,8 @@ function biomeFor(lat: number, lon: number, coast: number, i: number): number {
   return BIOME.grass;
 }
 
-const landDist = distanceTo((i) => land[i] === 0, 8); // land texels: distance to sea
-const seaDist = distanceTo((i) => land[i] === 1, 12); // sea texels: distance to land
+const landDist = distanceTo((i) => land[i] === 0, 8 * S); // land texels: distance to sea
+const seaDist = distanceTo((i) => land[i] === 1, 12 * S); // sea texels: distance to land
 const biomes = new Uint8Array(W * H);
 for (let y = 0; y < H; y++) {
   const lat = 90 - ((y + 0.5) / H) * 180;
@@ -173,7 +175,7 @@ for (let y = 0; y < H; y++) {
       biomes[i] = BIOME.ice; // sea ice
     } else {
       const n = fbm(lon / 2.3, lat / 2.3, 3, 11);
-      biomes[i] = seaDist[i]! <= 4 + n * 7 ? BIOME.shallow : BIOME.deep;
+      biomes[i] = seaDist[i]! <= (4 + n * 7) * S ? BIOME.shallow : BIOME.deep;
     }
   }
 }
