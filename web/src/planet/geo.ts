@@ -129,35 +129,73 @@ export interface Cluster<T extends Located> {
  * only change with zoom or data). The cluster position is the mean of its
  * members.
  */
-export function clusterItems<T extends Located>(items: T[], radiusDeg: number): Cluster<T>[] {
-  type Building = Cluster<T> & { seed: [number, number, number]; sum: [number, number, number] };
-  const clusters: Building[] = [];
-  const cosR = Math.cos(radiusDeg * DEG);
+/** Items in clustering order with their unit vectors: reusable across zoom levels. */
+export interface ClusterInput<T extends Located> {
+  sorted: T[];
+  vecs: Float64Array; // x, y, z per sorted item
+}
+
+export function prepareClusters<T extends Located>(items: T[]): ClusterInput<T> {
   // Stable order so clusters don't reshuffle between refreshes.
   const sorted = [...items].sort((a, b) => a.lat - b.lat || a.lon - b.lon);
-  for (const item of sorted) {
-    const v = toVec(item.lat, item.lon);
+  const vecs = new Float64Array(sorted.length * 3);
+  sorted.forEach((item, i) => vecs.set(toVec(item.lat, item.lon), i * 3));
+  return { sorted, vecs };
+}
+
+export function clusterItems<T extends Located>(items: T[] | ClusterInput<T>, radiusDeg: number): Cluster<T>[] {
+  const { sorted, vecs } = Array.isArray(items) ? prepareClusters(items) : items;
+  type Building = { seed: number; items: T[]; sx: number; sy: number; sz: number; index: number };
+  const clusters: Building[] = [];
+  const cosR = Math.cos(radiusDeg * DEG);
+  // Spatial hash over unit vectors: a cluster seed within the radius of a
+  // point is always in the point's cell or a neighbouring one (cells are as
+  // wide as the chord for the radius), so each item checks a handful of
+  // clusters instead of all of them. Same result as checking every cluster in
+  // creation order: the earliest-created match wins.
+  const cell = Math.max(1e-4, 2 * Math.sin((radiusDeg * DEG) / 2));
+  const grid = new Map<number, Building[]>();
+  const SPAN = 1 << 13; // cell indices fit easily: |index| <= 1 / cell
+  const key = (ix: number, iy: number, iz: number) => ((ix + SPAN) * 2 * SPAN + (iy + SPAN)) * 2 * SPAN + (iz + SPAN);
+  for (let n = 0; n < sorted.length; n++) {
+    const vx = vecs[n * 3]!;
+    const vy = vecs[n * 3 + 1]!;
+    const vz = vecs[n * 3 + 2]!;
+    const ix = Math.floor(vx / cell);
+    const iy = Math.floor(vy / cell);
+    const iz = Math.floor(vz / cell);
     let home: Building | null = null;
-    for (const c of clusters) {
-      if (c.seed[0] * v[0] + c.seed[1] * v[1] + c.seed[2] * v[2] >= cosR) {
-        home = c;
-        break;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const bucket = grid.get(key(ix + dx, iy + dy, iz + dz));
+          if (!bucket) continue;
+          for (const c of bucket) {
+            if (home && c.index >= home.index) continue;
+            const s0 = c.seed * 3;
+            if (vecs[s0]! * vx + vecs[s0 + 1]! * vy + vecs[s0 + 2]! * vz >= cosR) home = c;
+          }
+        }
       }
     }
     if (!home) {
-      home = { lat: item.lat, lon: item.lon, items: [] as T[], seed: v, sum: [0, 0, 0] };
+      home = { seed: n, items: [], sx: 0, sy: 0, sz: 0, index: clusters.length };
       clusters.push(home);
+      const k = key(ix, iy, iz);
+      const bucket = grid.get(k);
+      if (bucket) bucket.push(home);
+      else grid.set(k, [home]);
     }
-    home.items.push(item);
-    home.sum[0] += v[0];
-    home.sum[1] += v[1];
-    home.sum[2] += v[2];
+    home.items.push(sorted[n]!);
+    home.sx += vx;
+    home.sy += vy;
+    home.sz += vz;
   }
-  return clusters.map(({ items: members, sum }) => {
-    const len = Math.hypot(sum[0], sum[1], sum[2]) || 1;
+  return clusters.map(({ items: members, sx, sy, sz }) => {
+    const len = Math.hypot(sx, sy, sz) || 1;
     return {
-      lat: Math.asin(clamp(sum[1] / len, -1, 1)) / DEG,
-      lon: Math.atan2(sum[0], sum[2]) / DEG,
+      lat: Math.asin(clamp(sy / len, -1, 1)) / DEG,
+      lon: Math.atan2(sx, sz) / DEG,
       items: members,
     };
   });

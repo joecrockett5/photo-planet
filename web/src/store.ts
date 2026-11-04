@@ -37,8 +37,9 @@ class Store {
     this.emit();
   }
 
-  remove(id: string): void {
-    this.items = this.items.filter((i) => i.id !== id);
+  remove(...ids: string[]): void {
+    const gone = new Set(ids);
+    this.items = this.items.filter((i) => !gone.has(i.id));
     this.emit();
   }
 

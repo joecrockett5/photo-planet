@@ -170,6 +170,7 @@ server/   Fastify + TypeScript, SQLite (better-sqlite3), sharp, exifr, ffmpeg/ff
 | PATCH | `/api/media` | place or clear several at once: `{ ids, lat, lon }` → `{ items }` |
 | GET | `/api/places?q=` | search towns by name → `{ places: [{ name, country, lat, lon }] }` (max 8) |
 | DELETE | `/api/media/:id` | delete item and files |
+| DELETE | `/api/media` | delete several: `{ ids }` → `{ deleted }` (all or nothing) |
 | GET | `/media/:id/thumb` | thumbnail |
 | GET | `/media/:id/display` | browser-viewable version (or original) |
 | GET | `/media/:id/original` | original (`?download` for an attachment) |
@@ -227,6 +228,15 @@ deliberately differs. Revisit any of them freely.
   zoom the renderer samples a half-resolution copy (full detail would only add
   speckle); zoomed past the map's own detail it nudges samples with smooth
   noise so coastlines come out irregular rather than as square steps.
+- **Rendering speed.** Zoomed in (radius ≥ 160 art px) the ray-caster does
+  the exact sphere maths every 8 pixels along a row and interpolates between
+  (the visible patch is nearly flat), falling back to every pixel near the
+  limb, the poles and the antimeridian; output differs from exact on < 1% of
+  pixels. Pins re-cluster only when zoom crosses a quarter-octave level
+  (results cached per level, sort/vectors prepared once), with a spatial hash
+  making each pass linear; updates that move nothing (status polls) skip it.
+  Measured on a 2560×1440 screen: deep-zoom frames 12 → ~8ms; zooming with
+  30k photos no longer drops frames.
 - **Deep zoom.** The zoom limit is a planet radius of 2600 art px whatever the
   screen (≈39× on desktop, ≈52× on a phone), enough for places ~20km apart to
   get separate pins (Kyoto and Osaka; Tokyo and Yokohama). Wheel and pinch zoom
@@ -265,7 +275,8 @@ deliberately differs. Revisit any of them freely.
   slides it beside the panel; tapping the planet away from pins closes it,
   tapping another pin switches to it.
 - **Placing** an unplaced item is done from the viewer (*place*), or for
-  several at once from the tray's *select* mode (*place* in its footer). Then
+  several at once from the tray's *select* mode (*place* in its footer; the
+  same footer has *delete*, which asks again: "delete 3?"). Then
   either tap the planet, or type a town and pick a suggestion: moving through
   suggestions turns the planet there and blinks a pin, with the planet shifted
   below the panel so the spot stays visible. The town's own coordinates are

@@ -122,6 +122,28 @@ describe('media api', () => {
     expect(bad.statusCode).toBe(400);
   });
 
+  it('deletes several items at once, all or nothing', async () => {
+    const res = await upload([
+      { name: 'a.png', data: await tinyPng() },
+      { name: 'b.png', data: await tinyPng({ r: 0, g: 200, b: 0 }) },
+      { name: 'c.png', data: await tinyPng({ r: 0, g: 0, b: 200 }) },
+    ]);
+    const ids: string[] = res.json().results.map((r: { item: { id: string } }) => r.item.id);
+    const files = ids.map((id) => app.ctx.storage.abs(app.ctx.repo.get(id)!.original_path));
+
+    const missing = await app.inject({ method: 'DELETE', url: '/api/media', payload: { ids: [ids[0], 'nope'] } });
+    expect(missing.statusCode).toBe(404);
+    expect(app.ctx.repo.get(ids[0]!)).toBeTruthy(); // nothing deleted
+
+    const del = await app.inject({ method: 'DELETE', url: '/api/media', payload: { ids: ids.slice(0, 2) } });
+    expect(del.statusCode).toBe(200);
+    expect(del.json()).toEqual({ deleted: 2 });
+    expect(app.ctx.repo.list().map((r) => r.id)).toEqual([ids[2]]);
+    expect(files.map((f) => existsSync(f))).toEqual([false, false, true]);
+
+    expect((await app.inject({ method: 'DELETE', url: '/api/media', payload: { ids: [] } })).statusCode).toBe(400);
+  });
+
   it('searches places by name', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/places?q=osak' });
     expect(res.json().places[0]).toMatchObject({ name: 'Osaka', country: 'Japan' });

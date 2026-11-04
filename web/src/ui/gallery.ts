@@ -20,6 +20,11 @@ export class Gallery {
   onOpenItem: ((items: MediaItem[], index: number) => void) | null = null;
   /** Tray: place the selected items. */
   onPlace: ((items: MediaItem[]) => void) | null = null;
+  /** Tray: delete the selected items (after a confirming second tap). */
+  onDelete: ((items: MediaItem[]) => void) | null = null;
+  private deleteButton: HTMLButtonElement;
+  private deleteLabel = document.createTextNode('delete');
+  private deleteTimer: number | undefined;
   /** Tray select mode: ids of the chosen items, or null when not selecting. */
   private selected: Set<string> | null = null;
   private selectButton: HTMLButtonElement;
@@ -43,7 +48,11 @@ export class Gallery {
       icon('pin'),
       'place',
     );
-    this.actions.append(this.selectedCount, h('span.gallery-actions-buttons', {}, this.allButton, this.placeButton));
+    this.deleteButton = h('button.text-button.danger.gallery-delete', { onclick: () => this.deleteSelected() }, icon('trash'), this.deleteLabel);
+    this.actions.append(
+      this.selectedCount,
+      h('span.gallery-actions-buttons', {}, this.allButton, this.deleteButton, this.placeButton),
+    );
     this.el = h(
       'aside.gallery',
       { 'aria-label': 'Photos here', hidden: true },
@@ -121,7 +130,28 @@ export class Gallery {
     this.onPlace?.(chosen);
   }
 
+  /** First tap arms ("delete 3?"), a second within 3s deletes. */
+  private deleteSelected() {
+    if (!this.selected?.size) return;
+    if (!this.deleteButton.classList.contains('armed')) {
+      this.deleteButton.classList.add('armed');
+      this.deleteLabel.textContent = `delete ${this.selected.size}?`;
+      this.deleteTimer = window.setTimeout(() => this.disarmDelete(), 3000);
+      return;
+    }
+    this.disarmDelete();
+    const chosen = this.items.filter((i) => this.selected!.has(i.id));
+    this.onDelete?.(chosen);
+  }
+
+  private disarmDelete() {
+    clearTimeout(this.deleteTimer);
+    this.deleteButton.classList.remove('armed');
+    this.deleteLabel.textContent = 'delete';
+  }
+
   private renderSelection() {
+    this.disarmDelete(); // the selection changed: ask again
     const selecting = this.selected !== null;
     const n = this.selected?.size ?? 0;
     this.el.classList.toggle('selecting', selecting);
@@ -130,6 +160,7 @@ export class Gallery {
     this.selectedCount.textContent = n ? `${n} selected` : 'Tap photos to choose';
     this.allButton.textContent = n === this.items.length && n > 0 ? 'none' : 'all';
     this.placeButton.disabled = n === 0;
+    this.deleteButton.disabled = n === 0;
   }
 
   close(): void {

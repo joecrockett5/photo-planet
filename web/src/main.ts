@@ -99,8 +99,8 @@ const login = new Login(document.body);
 // ---------------------------------------------------------------- data → scene
 
 store.subscribe((items) => {
-  scene.pins.setItems(store.placed);
-  applyClearings();
+  // re-cluster pins and re-clear clouds only if something actually moved
+  if (scene.pins.setItems(store.placed)) applyClearings();
   const unplaced = store.unplaced.length;
   unplacedButton.hidden = unplaced === 0;
   unplacedButton.textContent = `${unplaced} unplaced`;
@@ -152,6 +152,7 @@ gallery.onClose = () => {
 };
 gallery.onOpenItem = (items, index) => viewer.open(items, index);
 gallery.onPlace = (items) => startPlacing(items);
+gallery.onDelete = (items) => void removeMany(items);
 
 scene.onTap = (x, y) => {
   if (placing.active) return void placeAt(x, y);
@@ -244,6 +245,16 @@ async function unplace(item: MediaItem) {
     });
   } catch (err) {
     toast.show(`Couldn't change it: ${(err as Error).message}`);
+  }
+}
+
+async function removeMany(items: MediaItem[]) {
+  try {
+    const { deleted } = await api.removeMany(items.map((i) => i.id));
+    store.remove(...items.map((i) => i.id));
+    toast.show(deleted === 1 ? 'Deleted' : `Deleted ${deleted}`);
+  } catch (err) {
+    toast.show(`Couldn't delete them: ${(err as Error).message}`);
   }
 }
 
