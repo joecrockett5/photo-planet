@@ -73,6 +73,21 @@ export function mediaRoutes(app: FastifyInstance, ctx: AppContext): void {
     },
   );
 
+  // Delete several items (and their files) at once.
+  app.delete<{ Body: { ids?: unknown } }>('/api/media', async (req, reply) => {
+    const ids = req.body?.ids;
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 1000 || !ids.every((i) => typeof i === 'string')) {
+      return reply.code(400).send({ error: 'ids must be a non-empty list of item ids' });
+    }
+    const rows = (ids as string[]).map((id) => repo.get(id));
+    if (rows.some((r) => !r)) return reply.code(404).send({ error: 'not found' });
+    ctx.db.transaction(() => {
+      for (const row of rows) repo.delete(row!.id);
+    })();
+    for (const row of rows) await storage.removeItemFiles(row!.id, row!.original_path);
+    return { deleted: rows.length };
+  });
+
   app.delete<{ Params: { id: string } }>('/api/media/:id', async (req, reply) => {
     const row = repo.get(req.params.id);
     if (!row) return reply.code(404).send({ error: 'not found' });

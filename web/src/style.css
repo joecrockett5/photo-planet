@@ -448,6 +448,7 @@ html.reduce-motion * {
 .gallery-place {
   color: var(--c-pinLight);
 }
+.gallery-delete:disabled,
 .gallery-place:disabled {
   color: var(--c-starDim);
   cursor: default;

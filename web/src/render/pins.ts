@@ -1,5 +1,5 @@
 import type { MediaItem } from '../api';
-import { clusterItems, project, type Cluster, type View } from '../planet/geo';
+import { clusterItems, prepareClusters, project, type Cluster, type ClusterInput, type View } from '../planet/geo';
 import { C } from './palette';
 import { plot } from './pixels';
 
@@ -21,8 +21,10 @@ export interface PinHit {
 /** Pins live on the canvas so they share the planet's pixels exactly. */
 export class PinLayer {
   private items: PlacedItem[] = [];
-  private clusters: Cluster<PlacedItem>[] = [];
-  private clusteredAtR = -1;
+  private prepared: ClusterInput<PlacedItem> | null = null;
+  private signature = '';
+  /** Clusters per zoom level (cleared when the items change). */
+  private cache = new Map<number, Cluster<PlacedItem>[]>();
   hits: PinHit[] = [];
   /** The cluster whose gallery is open; drawn lit. */
   selected: Set<string> | null = null;
@@ -30,18 +32,44 @@ export class PinLayer {
   /** A temporary marker (e.g. while placing an item). */
   ghost: { lat: number; lon: number } | null = null;
 
-  setItems(items: PlacedItem[]): void {
+  /** Returns false if nothing that affects the pins changed (e.g. a status poll). */
+  setItems(items: PlacedItem[]): boolean {
+    const signature = pinSignature(items);
+    // keep the newest item objects (for galleries/labels) either way
+    const sameLayout = signature === this.signature;
+    if (sameLayout) {
+      const byId = new Map(items.map((i) => [i.id, i]));
+      const fresh = (list: PlacedItem[]) => {
+        for (let k = 0; k < list.length; k++) list[k] = byId.get(list[k]!.id) ?? list[k]!;
+      };
+      for (const clusters of this.cache.values()) for (const c of clusters) fresh(c.items);
+      if (this.prepared) fresh(this.prepared.sorted);
+    } else {
+      this.cache.clear();
+      this.prepared = null;
+    }
     this.items = items;
-    this.clusteredAtR = -1;
+    this.signature = signature;
+    return !sameLayout;
   }
 
-  /** Pins closer than ~9 art px on screen merge; that's an angle that depends on zoom. */
+  /**
+   * Pins closer than ~9 art px on screen merge; that's an angle that depends
+   * on zoom. Zoom is quantised to quarter-octave levels, so a zoom gesture
+   * re-clusters every ~19% rather than every frame (and pins don't flicker
+   * between groupings), and each level's result is kept.
+   */
   private clustersFor(r: number): Cluster<PlacedItem>[] {
-    if (r !== this.clusteredAtR) {
-      this.clusters = clusterItems(this.items, (9 / r) * (180 / Math.PI));
-      this.clusteredAtR = r;
+    const level = Math.round(Math.log2(r) * 4);
+    let clusters = this.cache.get(level);
+    if (!clusters) {
+      const levelR = 2 ** (level / 4);
+      this.prepared ??= prepareClusters(this.items);
+      clusters = clusterItems(this.prepared, (9 / levelR) * (180 / Math.PI));
+      if (this.cache.size > 40) this.cache.clear();
+      this.cache.set(level, clusters);
     }
-    return this.clusters;
+    return clusters;
   }
 
   draw(buf: Uint32Array, w: number, h: number, view: View, t: number, motion: boolean): void {
@@ -109,4 +137,11 @@ export class PinLayer {
     }
     return best;
   }
+}
+
+/** What pins depend on: which items there are and where they are. */
+function pinSignature(items: PlacedItem[]): string {
+  let s = '';
+  for (const i of items) s += `${i.id}:${i.lat},${i.lon};`;
+  return s;
 }

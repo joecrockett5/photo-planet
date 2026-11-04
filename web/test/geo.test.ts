@@ -101,6 +101,47 @@ describe('clusterItems', () => {
     expect(clusterItems([at(-17, 179.9, 'a'), at(-17, -179.9, 'b')], 1)).toHaveLength(1);
   });
 
+  it('matches the straightforward all-pairs clustering exactly', () => {
+    // reference: the original greedy version, checking every cluster in creation order
+    const reference = (pts: { lat: number; lon: number; id: string }[], radiusDeg: number) => {
+      const cosR = Math.cos((radiusDeg * Math.PI) / 180);
+      const vec = (lat: number, lon: number) => {
+        const p = (lat * Math.PI) / 180;
+        const l = (lon * Math.PI) / 180;
+        return [Math.cos(p) * Math.sin(l), Math.sin(p), Math.cos(p) * Math.cos(l)];
+      };
+      const seeds: number[][] = [];
+      const groups: string[][] = [];
+      for (const it of [...pts].sort((a, b) => a.lat - b.lat || a.lon - b.lon)) {
+        const v = vec(it.lat, it.lon);
+        const k = seeds.findIndex((s) => s[0]! * v[0]! + s[1]! * v[1]! + s[2]! * v[2]! >= cosR);
+        if (k >= 0) groups[k]!.push(it.id);
+        else (seeds.push(v), groups.push([it.id]));
+      }
+      return groups.map((g) => g.join()).sort();
+    };
+    let seed = 3;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const pts = Array.from({ length: 1500 }, (_, i) => {
+      // dense blobs, scattered points, and some near the poles and antimeridian
+      const kind = i % 5;
+      const lat = kind === 4 ? 85 + rnd() * 4.9 : kind === 3 ? (rnd() - 0.5) * 170 : 35 + (rnd() - 0.5) * 2;
+      const lon = kind === 2 ? 179.5 + rnd() - 1 + (rnd() < 0.5 ? 0 : -359) : (rnd() - 0.5) * (kind === 3 ? 360 : 4) + (kind === 3 ? 0 : 139);
+      return { lat, lon, id: `p${i}` };
+    });
+    for (const radius of [0.05, 0.3, 2, 9]) {
+      expect(clusterItems(pts, radius).map((c) => c.items.map((i) => i.id).join()).sort()).toEqual(reference(pts, radius));
+    }
+  });
+
+  it('copes with tens of thousands of photos quickly', () => {
+    const pts = Array.from({ length: 30000 }, (_, i) => ({ lat: 35 + (i % 173) / 400, lon: 139 + (i % 211) / 300, id: `${i}` }));
+    const started = performance.now();
+    const clusters = clusterItems(pts, 0.2);
+    expect(clusters.reduce((n, c) => n + c.items.length, 0)).toBe(30000);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it('is independent of input order', () => {
     const a = clusterItems(items, 5).map((c) => c.items.map((i) => i.id).sort().join());
     const b = clusterItems([...items].reverse(), 5).map((c) => c.items.map((i) => i.id).sort().join());

@@ -84,6 +84,13 @@ export const api = {
     fetch(`/api/places?q=${encodeURIComponent(q)}`, { signal })
       .then((r) => json<{ places: PlaceMatch[] }>(r))
       .then((r) => r.places),
+  /** Delete several items and their files. */
+  removeMany: (ids: string[]) =>
+    fetch('/api/media', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }).then((r) => json<{ deleted: number }>(r)),
   remove: (id: string) => fetch(`/api/media/${id}`, { method: 'DELETE' }).then((r) => json<void>(r)),
   login: (password: string) =>
     fetch('/api/login', {
