@@ -6,6 +6,8 @@
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
   --sar: env(safe-area-inset-right, 0px);
+  /* distance of the top corner text and buttons from the screen edges */
+  --edge: var(--gap);
   --px: 4px; /* CSS px per art pixel; set from JS */
   --tpx: 2px; /* CSS px per text pixel (Silkscreen is drawn on an 8px em) */
   --gap: calc(var(--px) * 3);
@@ -15,6 +17,13 @@
 
 * {
   box-sizing: border-box;
+}
+
+/* phones and tablets: a little more room around the top corners */
+@media (pointer: coarse) {
+  :root {
+    --edge: 20px;
+  }
 }
 
 html,
@@ -130,8 +139,8 @@ a:focus-visible {
 
 .title {
   position: fixed;
-  left: calc(var(--gap) + var(--sal));
-  top: calc(var(--gap) + var(--sat));
+  left: calc(var(--edge) + var(--sal));
+  top: calc(var(--edge) + var(--sat));
   color: var(--c-starMid);
   pointer-events: none;
   max-width: 60vw;
@@ -139,8 +148,8 @@ a:focus-visible {
 
 .corner-buttons {
   position: fixed;
-  right: calc(var(--gap) - 14px + var(--sar));
-  top: calc(var(--gap) - 14px + var(--sat));
+  right: calc(var(--edge) - 4px + var(--sar));
+  top: calc(var(--edge) - 10px + var(--sat));
   display: flex;
 }
 .corner-buttons .icon-button {
