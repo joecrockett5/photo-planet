@@ -49,8 +49,11 @@ export class PixelCanvas {
   resize(): void {
     const dpr = window.devicePixelRatio || 1;
     const rect = this.sizer.getBoundingClientRect();
-    const vw = Math.max(rect.width, window.innerWidth);
-    const vh = Math.max(rect.height, window.innerHeight);
+    const layoutW = Math.max(rect.width, window.innerWidth);
+    const layoutH = Math.max(rect.height, window.innerHeight);
+    const { w: vw, h: vh } = fullScreenSize(layoutW, layoutH);
+    // how far the real screen extends below the page's layout (iOS home-screen apps)
+    document.documentElement.style.setProperty('--xb', `${Math.max(0, vh - layoutH)}px`);
     this.devicePx = Math.max(1, Math.round(PixelCanvas.cssScaleFor(vw, vh) * dpr));
     this.cssPx = this.devicePx / dpr;
     const w = Math.ceil((vw * dpr) / this.devicePx);
@@ -111,4 +114,29 @@ export class PixelCanvas {
 /** Plot a pixel if it's on screen. */
 export function plot(buf: Uint32Array, w: number, h: number, x: number, y: number, color: number): void {
   if (x >= 0 && y >= 0 && x < w && y < h) buf[y * w + x] = color;
+}
+
+/**
+ * The size to draw at. In a full-screen app on a phone (added to the home
+ * screen), iOS lays the page out one status-bar height short of the screen:
+ * innerHeight, 100vh and even fixed elements all stop ~50px above the bottom,
+ * which left a strip without stars. There, use the physical screen size. Only
+ * for touch devices whose app spans the whole screen width (not desktop
+ * installed apps or split views), and never smaller than the layout.
+ */
+export function fullScreenSize(layoutW: number, layoutH: number): { w: number; h: number } {
+  const nav = navigator as Navigator & { standalone?: boolean };
+  const standalone =
+    nav.standalone === true || matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
+  if (!standalone || !matchMedia('(pointer: coarse)').matches || !screen?.width || !screen?.height) {
+    return { w: layoutW, h: layoutH };
+  }
+  // iOS reports screen size in portrait whatever the orientation
+  const short = Math.min(screen.width, screen.height);
+  const long = Math.max(screen.width, screen.height);
+  const portrait = layoutH >= layoutW;
+  const sw = portrait ? short : long;
+  const sh = portrait ? long : short;
+  if (Math.abs(sw - layoutW) > 2) return { w: layoutW, h: layoutH };
+  return { w: layoutW, h: Math.max(layoutH, sh) };
 }

@@ -6,6 +6,13 @@
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
   --sar: env(safe-area-inset-right, 0px);
+  /* iOS home-screen apps lay the page out one status-bar height short of the
+     real screen bottom; JS measures that and sets --xb, and bottom-anchored
+     things use --bottom so they sit at the true bottom (above the home bar). */
+  --xb: 0px;
+  --bottom: calc(var(--sab) - var(--xb));
+  /* distance of the corner text and buttons from the screen edges */
+  --edge: var(--gap);
   --px: 4px; /* CSS px per art pixel; set from JS */
   --tpx: 2px; /* CSS px per text pixel (Silkscreen is drawn on an 8px em) */
   --gap: calc(var(--px) * 3);
@@ -15,6 +22,13 @@
 
 * {
   box-sizing: border-box;
+}
+
+/* phones and tablets: a little more room around the corners */
+@media (pointer: coarse) {
+  :root {
+    --edge: 20px;
+  }
 }
 
 html,
@@ -130,8 +144,8 @@ a:focus-visible {
 
 .title {
   position: fixed;
-  left: calc(var(--gap) + var(--sal));
-  top: calc(var(--gap) + var(--sat));
+  left: calc(var(--edge) + var(--sal));
+  top: calc(var(--edge) + var(--sat));
   color: var(--c-starMid);
   pointer-events: none;
   max-width: 60vw;
@@ -139,8 +153,8 @@ a:focus-visible {
 
 .corner-buttons {
   position: fixed;
-  right: calc(var(--gap) - 14px + var(--sar));
-  top: calc(var(--gap) - 14px + var(--sat));
+  right: calc(var(--edge) - 4px + var(--sar));
+  top: calc(var(--edge) - 10px + var(--sat));
   display: flex;
 }
 .corner-buttons .icon-button {
@@ -159,8 +173,8 @@ body.placing-mode .corner-buttons {
 
 .upload {
   position: fixed;
-  right: calc(var(--gap) - 14px + var(--sar));
-  bottom: calc(var(--gap) - 14px + var(--sab));
+  right: calc(var(--edge) - 14px + var(--sar));
+  bottom: calc(var(--edge) - 14px + var(--bottom));
   display: flex;
   align-items: center;
   gap: var(--px);
@@ -175,7 +189,7 @@ body.placing-mode .corner-buttons {
 .upload-bar {
   position: fixed;
   left: 0;
-  bottom: var(--sab);
+  bottom: var(--bottom);
   height: var(--px);
   width: calc(var(--progress, 0) * 100%);
   background: var(--c-pin);
@@ -184,7 +198,7 @@ body.placing-mode .corner-buttons {
 body.dropping::after {
   content: 'drop to add';
   position: fixed;
-  inset: var(--gap);
+  inset: var(--gap) var(--gap) calc(var(--gap) - var(--xb));
   display: grid;
   place-items: center;
   border: var(--px) dashed var(--c-starMid);
@@ -217,7 +231,7 @@ body.dropping::after {
   /* phones: a bottom sheet */
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: calc(0px - var(--xb));
   height: 62vh;
   height: 62dvh;
   border-top-width: var(--px);
@@ -323,7 +337,7 @@ body.dropping::after {
 
 .viewer {
   position: fixed;
-  inset: 0;
+  inset: 0 0 calc(0px - var(--xb));
   z-index: 5;
   background: var(--c-space);
   display: flex;
@@ -492,8 +506,8 @@ html.reduce-motion * {
 
 .unplaced {
   position: fixed;
-  left: calc(var(--gap) - calc(var(--tpx) * 2) + var(--sal));
-  bottom: calc(var(--gap) - calc(var(--tpx) * 3) + var(--sab));
+  left: calc(var(--edge) - calc(var(--tpx) * 2) + var(--sal));
+  bottom: calc(var(--edge) - calc(var(--tpx) * 3) + var(--bottom));
 }
 
 .placing {
@@ -603,7 +617,7 @@ body.placing-mode .title {
   left: calc(var(--gap) + var(--sal));
   right: calc(var(--gap) + var(--sar));
   /* above the bottom corners (counter and +) */
-  bottom: calc(var(--gap) + 40px + var(--sab));
+  bottom: calc(var(--edge) + 40px + var(--bottom));
   width: fit-content;
   margin: 0 auto;
   display: flex;
@@ -629,7 +643,7 @@ body.locked .viewer {
   position: fixed;
   left: calc(var(--gap) + var(--sal));
   right: calc(var(--gap) + var(--sar));
-  bottom: max(6vh, calc(var(--gap) + var(--sab)));
+  bottom: max(6vh, calc(var(--edge) + var(--bottom)));
   width: fit-content;
   margin: 0 auto;
   display: flex;
@@ -696,7 +710,7 @@ html.reduce-motion .viewer-stage.loading::before {
   position: fixed;
   left: calc(var(--gap) + var(--sal));
   right: calc(var(--gap) + var(--sar));
-  bottom: calc(var(--gap) + 52px + var(--sab));
+  bottom: calc(var(--edge) + 52px + var(--bottom));
   text-align: center;
   color: var(--c-starMid);
   pointer-events: none;
