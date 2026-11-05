@@ -301,6 +301,8 @@ deliberately differs. Revisit any of them freely.
   safe-area insets (CSS vars `--sat/--sab/--sal/--sar`, also covering
   landscape notches). The canvas is sized from a fixed full-screen element
   rather than `innerHeight`, which iOS reports without the status bar there.
+  On touch screens the title and the top-right buttons sit 20px in from the
+  edges (`--edge`); the bottom corners keep their original spacing.
   Viewer media is sized explicitly (absolute + `object-fit: contain`) because
   iOS Safari ignores `max-height: 100%` inside a flex item, letting tall
   photos run off the top; a tap on the letterbox still closes the viewer.
