@@ -1,12 +1,20 @@
 /**
- * Rasterise Natural Earth geography (from the `world-atlas` package) into the
- * small equirectangular maps the planet renderer samples:
- *   - earth-biomes.bin (4096x2048, from Natural Earth 1:10m land): a biome index per texel (ocean depth, beach, grass,
- *     forest, desert, rock/tundra, ice). Land/ocean is real data; biomes are
- *     hand-placed regions with noisy edges, which is plenty at pixel-art scale.
- * (Country rasterisation here only steers biomes, e.g. Greenland's ice. Place
+ * Rasterise Natural Earth geography into the small equirectangular map the
+ * planet renderer samples: earth-biomes.bin (4096x2048), a biome index per
+ * texel (ocean depth, lakes, beach, grass, forest, desert, rock/tundra, ice).
+ * Land, sea and lakes are real data; biomes are hand-placed regions with noisy
+ * edges, which is plenty at pixel-art scale.
+ *
+ * Inputs: Natural Earth 1:10m land and lakes (public domain). Natural Earth's
+ * own land layer is used rather than world-atlas's, which is merged from
+ * countries and so fills in the Caspian Sea. Fetch them first:
+ *   mkdir -p /tmp/ne && cd /tmp/ne
+ *   curl -LO https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson
+ *   curl -LO https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_lakes.geojson
+ * then: npm run earth -w web -- /tmp/ne
+ * (Countries, from world-atlas, only steer biomes, e.g. Greenland's ice. Place
  * names come from the server: see server/scripts/make-places.ts.)
- * Run with `npm run earth -w web`. Outputs are committed.
+ * Outputs are committed.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -18,6 +26,8 @@ import { BIOME, encodeRle } from '../src/planet/earth-format';
 import { fillPolygon, polygonsOf } from './raster';
 
 const require = createRequire(import.meta.url);
+const neDir = process.argv[2];
+if (!neDir) throw new Error('usage: make-earth <dir with ne_10m_land.geojson and ne_10m_lakes.geojson>');
 const W = 4096;
 const H = 2048;
 /** Distances below are in texels of the original 2048-wide map: scale them. */
@@ -55,10 +65,18 @@ function distanceTo(isSource: (i: number) => boolean, max: number): Uint8Array {
 
 // ---------------------------------------------------------------- land + countries
 
+type GeoJson = { features: { properties: Record<string, unknown>; geometry: never }[] };
+const readGeoJson = (name: string) => JSON.parse(readFileSync(path.join(neDir, name), 'utf8')) as GeoJson;
+
 const land = new Uint8Array(W * H);
-const landTopo = JSON.parse(readFileSync(require.resolve('world-atlas/land-10m.json'), 'utf8'));
-for (const f of (feature(landTopo, landTopo.objects.land) as unknown as { features: { geometry: never }[] }).features)
+for (const f of readGeoJson('ne_10m_land.geojson').features)
   for (const poly of polygonsOf(f.geometry)) fillPolygon(land, W, H, poly, 1);
+
+// Lakes and reservoirs (the Great Lakes, Victoria, Baikal...): carved out of the land.
+const lake = new Uint8Array(W * H);
+for (const f of readGeoJson('ne_10m_lakes.geojson').features)
+  for (const poly of polygonsOf(f.geometry)) fillPolygon(lake, W, H, poly, 1);
+for (let i = 0; i < W * H; i++) if (!land[i]) lake[i] = 0; // only inland water
 
 const countryTopo = JSON.parse(readFileSync(require.resolve('world-atlas/countries-50m.json'), 'utf8'));
 const countryFeatures = (
@@ -161,7 +179,7 @@ function biomeFor(lat: number, lon: number, coast: number, i: number): number {
   return BIOME.grass;
 }
 
-const landDist = distanceTo((i) => land[i] === 0, 8 * S); // land texels: distance to sea
+const landDist = distanceTo((i) => land[i] === 0 || lake[i] === 1, 8 * S); // land texels: distance to water
 const seaDist = distanceTo((i) => land[i] === 1, 12 * S); // sea texels: distance to land
 const biomes = new Uint8Array(W * H);
 for (let y = 0; y < H; y++) {
@@ -169,7 +187,9 @@ for (let y = 0; y < H; y++) {
   for (let x = 0; x < W; x++) {
     const i = y * W + x;
     const lon = ((x + 0.5) / W) * 360 - 180;
-    if (land[i]) {
+    if (lake[i]) {
+      biomes[i] = BIOME.lake;
+    } else if (land[i]) {
       biomes[i] = biomeFor(lat, lon, landDist[i]!, i);
     } else if (lat > 79 + fbm(lon / 4, lat / 4, 3, 5) * 6 || lat < -73) {
       biomes[i] = BIOME.ice; // sea ice
@@ -189,7 +209,7 @@ console.log(`biomes ${(biomeBin.length / 1024).toFixed(0)}KB`);
 // Optional preview: PREVIEW=out.png (uses sharp from the server workspace).
 if (process.env.PREVIEW) {
   const sharp = require('sharp');
-  const colors = ['#1c4087', '#2b78bb', '#e3d29a', '#62ad4f', '#28704a', '#e0bf78', '#8e8476', '#f1f5ff'];
+  const colors = ['#1c4087', '#2b78bb', '#e3d29a', '#62ad4f', '#28704a', '#e0bf78', '#8e8476', '#f1f5ff', '#2b78bb'];
   const rgb = Buffer.alloc(W * H * 3);
   for (let i = 0; i < W * H; i++) {
     const c = parseInt(colors[biomes[i]!]!.slice(1), 16);

@@ -219,8 +219,12 @@ deliberately differs. Revisit any of them freely.
   DPR). UI *text* (Silkscreen) is drawn at half that scale, still whole device
   pixels so it stays crisp, because at full scale the "tiny" title would be
   ~20px tall.
-- **Biomes are painted, not measured.** Land/ocean and coastlines are real
-  Natural Earth 1:10m data (country borders 1:50m). Biomes (desert, forest, ice, rock)
+- **Biomes are painted, not measured.** Land/ocean, coastlines and inland
+  water are real Natural Earth 1:10m data (country borders 1:50m): 1,355 lakes
+  and reservoirs (the Great Lakes, Victoria, Baikal...) are drawn in the
+  shallow-water blues, and the Caspian is open sea. Natural Earth's own land
+  layer is used, not world-atlas's, which is merged from countries and fills
+  the Caspian in. Biomes (desert, forest, ice, rock)
   are hand-placed regions with noisy edges plus latitude belts, the Andes
   traced along South America's Pacific coast, and shallow water from distance
   to land. There is no elevation or climate data. The map is a committed

@@ -29,6 +29,17 @@ describe('earth map', () => {
     ['mid-Pacific', 0, -150],
     ['Indian Ocean', -20, 80],
   ])('%s is deep ocean', (_, lat, lon) => expect(at(lat, lon)).toBe(BIOME.deep));
+  it.each([
+    ['Lake Superior', 47.7, -87.5],
+    ['Lake Michigan', 43.5, -87],
+    ['Lake Erie', 42.2, -81.2],
+    ['Lake Victoria', -1, 33],
+    ['Lake Baikal', 53.5, 108],
+    ['Great Bear Lake', 66, -121],
+  ])('%s is a lake', (_, lat, lon) => expect(at(lat, lon)).toBe(BIOME.lake));
+  it('has the Caspian as open water, not land', () => {
+    expect([BIOME.deep, BIOME.shallow]).toContain(at(42, 51));
+  });
   it('has a Sahara and an Antarctic ice sheet', () => {
     expect(at(23, 10)).toBe(BIOME.desert);
     expect(at(-80, 0)).toBe(BIOME.ice);

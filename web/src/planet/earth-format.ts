@@ -9,6 +9,7 @@ export const BIOME = {
   desert: 5,
   rock: 6,
   ice: 7,
+  lake: 8,
 } as const;
 
 /**

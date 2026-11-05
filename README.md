@@ -135,8 +135,9 @@ npm run build && npm start   # production build on :3000
 Pass the same env vars to try the login and title locally, e.g.
 `APP_PASSWORD=stardust PLANET_TITLE="Our Planet" npm run dev`.
 
-The planet's geography is generated from the `world-atlas` package by
-`npm run earth -w web`, the icons by `npm run icons -w web`, and the place-name
+The planet's geography is generated from Natural Earth land and lakes by
+`npm run earth -w web -- <folder>` (download instructions at the top of
+`web/scripts/make-earth.ts`), the icons by `npm run icons -w web`, and the place-name
 data by `npm run places -w server` (instructions at the top of
 `server/scripts/make-places.ts`); the outputs are committed, so you only need
 these if you change them.
