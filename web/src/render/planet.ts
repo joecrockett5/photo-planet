@@ -14,6 +14,8 @@ RAMPS[BIOME.forest] = [C.landNight, C.forestDark, C.forest];
 RAMPS[BIOME.desert] = [C.landNight, C.desertDark, C.desert];
 RAMPS[BIOME.rock] = [C.landNight, C.rockDark, C.rock];
 RAMPS[BIOME.ice] = [C.iceNight, C.iceDark, C.ice];
+// lakes: the shallow-water blues, so they read as water but stand out from deep ocean
+RAMPS[BIOME.lake] = [C.oceanDark, C.shallowDark, C.shallow];
 const CLOUD = [C.iceNight, C.iceDark, C.ice];
 const FLAT = new Uint32Array(RAMPS.flat());
 

@@ -29,7 +29,7 @@ npm run build        # build web then server
 npm start            # run the built app on :3000 (serves web/dist)
 npm run check        # typecheck + tests for all workspaces; must pass before committing
 docker compose up --build   # full production-like run on :8080
-npm run earth -w web # regenerate the planet's geography (committed output)
+npm run earth -w web -- <natural earth dir>  # regenerate the planet's geography (see script header)
 npm run icons -w web # regenerate favicon/touch icon from the planet renderer
 npm run places -w server -- <geonames dir>  # regenerate place-name data (see script header)
 ```
@@ -78,4 +78,5 @@ than crash. In a fresh Linux sandbox:
   ~375px-wide mobile viewport) before calling it done. Take screenshots if you can.
 - If Docker is available, `docker compose up --build` and hit
   `http://localhost:8080/api/health`. If Docker is not available in your
-  environment, say so; CI (`.github/workflows/ci.yml`) builds the image on every push.
+  environment, say so; CI (`.github/workflows/ci.yml`) runs the tests on every pull
+  request and also builds and smoke-tests the image on pushes to `main`.
