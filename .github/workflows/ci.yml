@@ -26,6 +26,9 @@ jobs:
     # Debian's CDN: the runners' own Ubuntu mirror is sometimes slow enough
     # (~50 kB/s) to stall the ffmpeg install for 30 min.
     container: node:24-bookworm
+    defaults:
+      run:
+        shell: bash # container jobs default to sh
     # normally ~1 min; never hold a run for half an hour
     timeout-minutes: 15
     env:
