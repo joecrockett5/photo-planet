@@ -21,6 +21,11 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # normally ~1 min; don't let a stuck mirror hold a run for half an hour
+    timeout-minutes: 15
+    env:
+      # exercised by the server tests
+      APT_PACKAGES: ffmpeg libheif-examples libheif-plugin-libde265
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,8 +41,29 @@ jobs:
           done
           grep -q "^## \[$v\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## [$v]' section"; exit 1; }
           echo "version $v"
-      # ffmpeg and libheif are exercised by the server tests
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg libheif-examples libheif-plugin-libde265
+      # The runners' Ubuntu mirror is sometimes very slow (~50 kB/s, which turns
+      # the 20 s ffmpeg install into 30 min), so the downloaded .debs are cached,
+      # keyed on the exact versions apt resolves: a normal run downloads nothing,
+      # and after an Ubuntu update only the changed packages are fetched.
+      - name: Resolve system packages
+        id: apt
+        run: |
+          sudo apt-get update -qq
+          v=$(apt-get install -s --no-install-recommends $APT_PACKAGES | grep '^Inst' | sha256sum | cut -c1-16)
+          echo "key=apt-${{ runner.os }}-${{ runner.arch }}-$v" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/apt-archives
+          key: ${{ steps.apt.outputs.key }}
+          restore-keys: apt-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install ffmpeg and libheif
+        run: |
+          mkdir -p ~/apt-archives/partial
+          opts=(-o Dir::Cache::Archives="$HOME/apt-archives" -o APT::Keep-Downloaded-Packages=true)
+          sudo apt-get install -y --no-install-recommends "${opts[@]}" $APT_PACKAGES
+          sudo apt-get autoclean -qq "${opts[@]}"   # drop superseded versions
+          sudo rm -rf ~/apt-archives/lock ~/apt-archives/partial
+          sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
       - run: npm ci
       - run: npm run check
       - run: npm run build
