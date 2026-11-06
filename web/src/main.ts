@@ -80,7 +80,12 @@ motion.onChange((reduced) => {
   toast.show(reduced ? 'Reduce motion on: a still planet and sky' : 'Motion on: twinkling stars, drifting clouds, a turning planet', undefined, 2500);
 });
 renderMotionButton();
-ui.append(h('div.corner-buttons', {}, motionButton, cloudButton));
+const feedButton = h(
+  'button.icon-button.feed-toggle',
+  { 'aria-label': 'Recent uploads', title: 'Recent uploads', onclick: () => openFeed() },
+  icon('feed'),
+);
+ui.append(h('div.corner-buttons', {}, feedButton, motionButton, cloudButton));
 const coarse = matchMedia('(pointer: coarse)').matches;
 const emptyHint = h(
   'p.empty-hint',
@@ -135,6 +140,15 @@ function layoutForPanel() {
   scene.setOffset(wide ? -rect.width / 2 / cssPx : 0, wide ? 0 : -rect.height / 2 / cssPx);
 }
 addEventListener('resize', layoutForPanel);
+
+function openFeed() {
+  if (gallery.isFeed) return gallery.close();
+  placing.cancel();
+  scene.pins.selected = null;
+  gallery.openFeed(store.items);
+  document.body.classList.add('gallery-open');
+  requestAnimationFrame(() => layoutForPanel());
+}
 
 function openTray() {
   placing.cancel();

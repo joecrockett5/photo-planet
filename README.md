@@ -18,6 +18,8 @@ Self-hosted, one Docker container, all data in one volume. Made as a gift.
   top-right brings them back everywhere. The planet and sky start still; the
   twinkle button beside it switches on twinkling stars, drifting clouds and a
   slowly turning planet.
+- **See what's new**: the list button top-right shows every upload, newest
+  first, by the day it was added.
 - **Private** behind one shared password, if you set one.
 
 See [docs/SPEC.md](docs/SPEC.md) for the full design.
