@@ -21,17 +21,21 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    # normally ~1 min; don't let a stuck mirror hold a run for half an hour
+    # Debian bookworm, the same base as the published image, so the tests run
+    # against the ffmpeg and libheif the app ships with. Its packages come from
+    # Debian's CDN: the runners' own Ubuntu mirror is sometimes slow enough
+    # (~50 kB/s) to stall the ffmpeg install for 30 min.
+    container: node:24-bookworm
+    defaults:
+      run:
+        shell: bash # container jobs default to sh
+    # normally ~1 min; never hold a run for half an hour
     timeout-minutes: 15
     env:
       # exercised by the server tests
-      APT_PACKAGES: ffmpeg libheif-examples libheif-plugin-libde265
+      APT_PACKAGES: ffmpeg libheif-examples
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
       - name: Versions agree and have changelog notes
         run: |
           v=$(node -p 'require("./package.json").version')
@@ -41,29 +45,32 @@ jobs:
           done
           grep -q "^## \[$v\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## [$v]' section"; exit 1; }
           echo "version $v"
-      # The runners' Ubuntu mirror is sometimes very slow (~50 kB/s, which turns
-      # the 20 s ffmpeg install into 30 min), so the downloaded .debs are cached,
-      # keyed on the exact versions apt resolves: a normal run downloads nothing,
-      # and after an Ubuntu update only the changed packages are fetched.
+      # The downloaded .debs are cached too, keyed on the exact versions apt
+      # resolves: a normal run downloads nothing, and after a Debian update only
+      # the changed packages are fetched.
       - name: Resolve system packages
         id: apt
         run: |
-          sudo apt-get update -qq
+          apt-get update -qq
           v=$(apt-get install -s --no-install-recommends $APT_PACKAGES | grep '^Inst' | sha256sum | cut -c1-16)
-          echo "key=apt-${{ runner.os }}-${{ runner.arch }}-$v" >> "$GITHUB_OUTPUT"
+          echo "key=apt-bookworm-${{ runner.arch }}-$v" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         with:
           path: ~/apt-archives
           key: ${{ steps.apt.outputs.key }}
-          restore-keys: apt-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: apt-bookworm-${{ runner.arch }}-
       - name: Install ffmpeg and libheif
         run: |
           mkdir -p ~/apt-archives/partial
           opts=(-o Dir::Cache::Archives="$HOME/apt-archives" -o APT::Keep-Downloaded-Packages=true)
-          sudo apt-get install -y --no-install-recommends "${opts[@]}" $APT_PACKAGES
-          sudo apt-get autoclean -qq "${opts[@]}"   # drop superseded versions
-          sudo rm -rf ~/apt-archives/lock ~/apt-archives/partial
-          sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
+          apt-get install -y -qq --no-install-recommends "${opts[@]}" $APT_PACKAGES
+          apt-get autoclean -qq "${opts[@]}"   # drop superseded versions
+          rm -rf ~/apt-archives/lock ~/apt-archives/partial
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-${{ runner.arch }}-
       - run: npm ci
       - run: npm run check
       - run: npm run build
