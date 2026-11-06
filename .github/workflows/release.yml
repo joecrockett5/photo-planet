@@ -1,0 +1,99 @@
+name: Release
+
+# Called by ci.yml on a push to main whose package.json version has no tag yet
+# (the tests have already passed there). It:
+#  1. builds the image for linux/amd64 and linux/arm64 and pushes it to
+#     ghcr.io/<owner>/photo-planet as :1.0.0, :1.0, :1 and :latest,
+#  2. smoke-tests the published image,
+#  3. tags the commit vX.Y.Z and publishes a GitHub Release with that
+#     version's notes from CHANGELOG.md.
+# Pre-release versions (1.1.0-rc.1) get only their exact tag and a pre-release.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version to release, without the v (e.g. 1.0.0)
+        required: true
+        type: string
+
+concurrency:
+  group: release
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # semver {{major}} / {{major}}.{{minor}} are skipped for pre-releases
+          tags: |
+            type=semver,pattern={{version}},value=v${{ inputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ inputs.version }}
+            type=semver,pattern={{major}},value=v${{ inputs.version }}
+            type=raw,value=latest,enable=${{ !contains(inputs.version, '-') }}
+          flavor: latest=false
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: APP_VERSION=${{ inputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test the published image
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.version }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          docker run -d --name pp -p 8080:3000 "$IMAGE"
+          for i in $(seq 1 30); do
+            if curl -fs localhost:8080/api/health | tee /dev/stderr | grep -q "\"version\":\"$VERSION\""; then exit 0; fi
+            sleep 1
+          done
+          docker logs pp; exit 1
+
+  github-release:
+    needs: image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          # the section under "## [VERSION]", up to the next section or the link list
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && (/^## \[/ || /^\[[^]]*\]: /) { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          {
+            echo
+            echo "### Run it"
+            echo
+            echo '```bash'
+            echo "docker pull ghcr.io/${GITHUB_REPOSITORY}:${VERSION}"
+            echo '```'
+          } >> notes.md
+          cat notes.md
+      - name: Tag and publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ inputs.version }}
+        run: |
+          prerelease=""
+          case "$TAG" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "Photo Planet $TAG" \
+            --notes-file notes.md $prerelease

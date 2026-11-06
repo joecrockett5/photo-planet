@@ -1,6 +1,6 @@
 /**
- * Render the favicon and touch icon with the real planet renderer, so the
- * icon is the same pixel planet. Run with `npm run icons -w web`; outputs in
+ * Render the favicon, touch icon and README logo with the real planet
+ * renderer, so they're the same pixel planet. Run with `npm run icons -w web`; outputs in
  * web/public are committed.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -54,4 +54,10 @@ writeFileSync(path.join(pub, 'favicon.svg'), svg(tiny, 16));
 await png(tiny, 16, 2, 'favicon-32.png');
 // iOS fills transparency with black, so give the touch icon the sky colour.
 await png(render(36, 14, C.space), 36, 5, 'apple-touch-icon.png');
-console.log('icons written to', pub);
+// README logo: a bigger planet, transparent, scaled up crisply.
+const logoSize = 48;
+await sharp(toRgba(render(logoSize, 21, null)), { raw: { width: logoSize, height: logoSize, channels: 4 } })
+  .resize(logoSize * 4, logoSize * 4, { kernel: 'nearest' })
+  .png()
+  .toFile(path.join(here, '../../docs/media/logo.png'));
+console.log('icons written to', pub, 'and docs/media/logo.png');

@@ -1,59 +1,188 @@
-# Photo Planet
+<p align="center">
+  <img src="docs/media/logo.png" width="128" height="128" alt="Photo Planet logo: a pixel-art Earth">
+</p>
 
-Upload photos and videos; each one is pinned where it was taken on a little
-pixel-art Earth you can spin around under a pixel-art starry sky. Tap a pin to
-see what was taken there.
+<h1 align="center">Photo Planet</h1>
 
-Self-hosted, one Docker container, all data in one volume. Made as a gift.
+<p align="center">
+  <strong>Your photos and videos, pinned where they were taken, on a little pixel-art planet you can spin.</strong><br>
+  Self-hosted · one Docker container · private by default
+</p>
 
-- **Upload** with the tiny `+` (or drag and drop onto the page). JPEG, PNG,
-  HEIC/HEIF, WebP, MP4, MOV and WebM. Originals are stored untouched.
-- **Location and date** come from the files themselves (EXIF for photos, the
-  QuickTime/MP4 location tags phones write for videos).
-- **No location?** The item waits in the "unplaced" tray until you open it,
-  choose *place* and tap the spot on the planet. You can *move*, *unplace* or
-  *delete* anything from the viewer.
-- **Zoom right in** (scroll or pinch towards a spot) until neighbouring towns
-  get their own pins. Clouds part over your photos; the little cloud button
-  top-right brings them back everywhere. The planet and sky start still; the
-  twinkle button beside it switches on twinkling stars, drifting clouds and a
-  slowly turning planet.
-- **See what's new**: the list button top-right shows every upload, newest
-  first, by the day it was added.
-- **Private** behind one shared password, if you set one.
+<p align="center">
+  <a href="https://github.com/joecrockett5/photo-planet/actions/workflows/ci.yml"><img src="https://github.com/joecrockett5/photo-planet/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/joecrockett5/photo-planet/releases"><img src="https://img.shields.io/badge/version-1.0.0-5a6fd8" alt="Version 1.0.0"></a>
+  <a href="https://github.com/joecrockett5/photo-planet/pkgs/container/photo-planet"><img src="https://img.shields.io/badge/ghcr.io-photo--planet-2496ED?logo=docker&amp;logoColor=white" alt="Container image on ghcr.io"></a>
+  <img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-555" alt="Platforms: amd64 and arm64">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3fa34d" alt="MIT License"></a>
+</p>
 
-See [docs/SPEC.md](docs/SPEC.md) for the full design.
+<p align="center">
+  <img src="docs/media/demo.gif" width="800" alt="Demo: the pixel planet turning under twinkling stars, a fling, flying to a pin in Lisbon to open its photos, the full-screen viewer, then zooming in on Japan">
+</p>
 
-## Run it
+---
 
-```bash
-cp .env.example .env    # then edit: set APP_PASSWORD, SESSION_SECRET, PLANET_TITLE
-docker compose up -d --build
+## Contents
+
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+- [Updating and versions](#updating-and-versions)
+- [Your data](#your-data)
+- [Putting it on the internet](#putting-it-on-the-internet)
+- [How it handles media](#how-it-handles-media)
+- [Development](#development)
+- [License and credits](#license-and-credits)
+
+## Features
+
+- 🌍 **A real little world.** A pixel-art Earth with real coastlines, lakes and
+  biomes, dithered day and night, drifting clouds and a twinkling sky. Drag to
+  spin (with a Google-Earth-style fling), scroll or pinch to zoom toward a spot,
+  close enough that towns 20km apart get their own pins.
+- 📍 **Photos place themselves.** Location and date come from the files
+  (EXIF for photos, the location tags phones write into videos), and each pin is
+  named offline: *"Osaka, Japan"*.
+- 📤 **Easy uploads.** The `+` button or drag and drop. JPEG, PNG, HEIC/HEIF,
+  WebP, MP4, MOV and WebM. Originals are kept byte-for-byte; duplicates are
+  recognised.
+- 🖼️ **Browse by place and day.** Tap a pin to fly there and open its photos;
+  full-screen viewer with swipe, arrow keys and video playback.
+- 🗂️ **Unplaced tray.** Photos without a location wait there: drop them on the
+  planet or type a town, several at once. Move, unplace or delete anything.
+- 🕒 **Uploads feed.** Everything newest first, by the day it was added.
+- 🔒 **Private.** One shared password with long-lived sessions. Nothing is sent
+  to third-party services: no external fonts, scripts, maps or geocoding APIs.
+- 📱 **Phone-friendly.** Touch gestures, bottom sheets, and it works as a
+  home-screen app. Calm by default: motion is reduced until you switch it on.
+- 🐳 **One container.** For `linux/amd64` and `linux/arm64` (Raspberry Pi, most
+  NAS boxes). All state lives in one volume.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/desktop-planet.png" alt="The planet with pins over Europe and Africa"></td>
+    <td width="50%"><img src="docs/media/desktop-gallery.png" alt="A pin's gallery: Lisbon and Porto, grouped by day"></td>
+  </tr>
+  <tr>
+    <td align="center">The planet</td>
+    <td align="center">Tap a pin: its photos, by day and town</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/media/desktop-feed.png" alt="The uploads feed, newest first"></td>
+    <td width="50%"><img src="docs/media/desktop-zoom.png" alt="Zoomed in on Japan: Tokyo, Kyoto and Osaka pins"></td>
+  </tr>
+  <tr>
+    <td align="center">Uploads feed</td>
+    <td align="center">Zoom right in</td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/media/desktop-viewer.png" alt="The full-screen viewer"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">Full-screen viewer</td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/media/phone.png" alt="On a phone: the planet, a gallery bottom sheet, and placing photos by typing a town"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">On a phone: the planet, a pin's photos, and placing photos by typing a town</td>
+  </tr>
+</table>
+
+<sub>The photos in these screenshots are generated illustrations.</sub>
+
+## Quick start
+
+All you need is [Docker](https://docs.docker.com/get-docker/). No source
+code: the app ships as a ready-made image,
+`ghcr.io/joecrockett5/photo-planet`.
+
+**1.** Make a folder with this `docker-compose.yml`:
+
+```yaml
+services:
+  photo-planet:
+    image: ghcr.io/joecrockett5/photo-planet:latest
+    restart: unless-stopped
+    ports:
+      - "8080:3000"
+    environment:
+      APP_PASSWORD: change-me              # the shared password
+      SESSION_SECRET: change-me-too        # any long random string: openssl rand -hex 32
+      PLANET_TITLE: "Sam & Alex"           # shown in the corner and the tab
+    volumes:
+      - photo-planet-data:/data
+
+volumes:
+  photo-planet-data:
 ```
 
-Open <http://localhost:8080> (or whatever `HOST_PORT` you chose).
+**2.** Start it:
 
-Check it's alive with `curl http://localhost:8080/api/health` → `{"ok":true}`.
+```bash
+docker compose up -d
+```
 
-To update later: `git pull && docker compose up -d --build`. Your data lives in
-the volume, so it survives rebuilds.
+**3.** Open <http://localhost:8080>, log in, and press `+`.
+
+Check it's healthy with `curl http://localhost:8080/api/health`, which
+returns `{"ok":true,"version":"1.0.0"}`.
+
+<details>
+<summary>Prefer plain <code>docker run</code>?</summary>
+
+```bash
+docker run -d --name photo-planet --restart unless-stopped \
+  -p 8080:3000 \
+  -e APP_PASSWORD=change-me \
+  -e SESSION_SECRET="$(openssl rand -hex 32)" \
+  -e PLANET_TITLE="Sam & Alex" \
+  -v photo-planet-data:/data \
+  ghcr.io/joecrockett5/photo-planet:latest
+```
+
+</details>
 
 ## Configuration
 
-All settings are environment variables (put them in `.env` for docker compose).
+Everything is an environment variable (in `environment:` above, or a `.env`
+file next to the compose file; see [`.env.example`](.env.example)).
 
 | Variable | Default | |
 |---|---|---|
 | `APP_PASSWORD` | unset | Shared password. Unset means no login: only do that on a private network. |
-| `SESSION_SECRET` | random per start | Signs the login cookie. Set it (e.g. `openssl rand -hex 32`) or everyone is logged out whenever the container restarts. |
-| `PLANET_TITLE` | `Photo Planet` | Shown small in the corner and as the browser tab title. A name works nicely: `Sam & Alex`. |
+| `SESSION_SECRET` | random per start | Signs the login cookie. Set it, or everyone is logged out whenever the container restarts. |
+| `PLANET_TITLE` | `Photo Planet` | Shown small in the corner and as the browser tab title. A name works nicely. |
 | `MAX_UPLOAD_MB` | `500` | Per-file upload limit. |
-| `HOST_PORT` | `8080` | Host port (docker compose only). |
 | `PORT` | `3000` | Port inside the container. You rarely need to change this. |
 | `DATA_DIR` | `/data` | Where everything is stored inside the container. |
 
 Logins last about a year (400 days, the browser maximum). Changing
 `APP_PASSWORD` logs everyone out.
+
+## Updating and versions
+
+Releases follow [semantic versioning](https://semver.org/) and are listed in
+the [changelog](CHANGELOG.md). Every release is published as these image tags:
+
+| Tag | Follows |
+|---|---|
+| `:latest` | the newest release |
+| `:1` | the newest `1.x.y` (new features and fixes, no breaking changes) |
+| `:1.0` | the newest `1.0.y` (fixes only) |
+| `:1.0.0` | exactly that release |
+
+To update:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Your photos live in the volume, so they survive updates.
 
 ## Your data
 
@@ -73,81 +202,97 @@ docker run --rm -v photo-planet-data:/data -v "$PWD":/backup debian:bookworm-sli
   tar czf /backup/photo-planet-backup.tgz -C /data .
 ```
 
-(Stop the container first, or run SQLite's `.backup`, if you want a perfectly
-consistent copy of the database while uploads are happening.)
+(Stop the container first if you want a perfectly consistent copy of the
+database while uploads are happening.)
 
 ## Putting it on the internet
 
-Any host that runs Docker works (a VPS, a home server, a NAS, Fly.io, Railway…):
+Any host that runs Docker works: a VPS, a home server, a NAS, Fly.io, Railway…
 
-- Build and run the image, publish container port `3000`, mount a persistent
-  volume at `/data`.
+- Publish container port `3000` and mount a persistent volume at `/data`.
 - Set `APP_PASSWORD` **and** `SESSION_SECRET`.
 - Put it behind HTTPS. Phones are fussy about picking photos on plain-HTTP
-  sites, and you don't want the password sent in the clear. The login cookie
-  is marked `Secure` automatically when the request arrives over HTTPS
+  sites, and you don't want the password sent in the clear. The login cookie is
+  marked `Secure` automatically when the request arrives over HTTPS
   (`X-Forwarded-Proto` from your proxy is trusted).
 - Raise your reverse proxy's request size limit so big videos can upload, and
-  give it a generous timeout. With Caddy that's automatic; nginx needs e.g.:
+  give it a generous timeout. With Caddy that's automatic:
 
-  ```nginx
-  client_max_body_size 500m;
-  proxy_read_timeout 600s;
+  ```
+  photos.example.com {
+    reverse_proxy localhost:8080
+  }
   ```
 
-A minimal Caddyfile:
-
-```
-photos.example.com {
-  reverse_proxy localhost:8080
-}
-```
+  nginx needs e.g. `client_max_body_size 500m;` and `proxy_read_timeout 600s;`.
 
 ## How it handles media
 
-- Thumbnails are 400px WebP. HEIC photos get a JPEG copy for browsers
-  (via libheif's `heif-dec`/`heif-convert`, or a bundled WebAssembly libheif). Videos get a poster frame; MOV/HEVC videos get an
-  H.264 MP4 copy so they play in every browser (iPhone HDR video is
-  tone-mapped). MP4/WebM that already play are served as-is, with seeking.
-- Processing runs in the background, one file at a time; the pin appears as
+- Thumbnails are 400px WebP. HEIC photos get a JPEG copy for browsers (via
+  libheif, or a bundled WebAssembly decoder). Videos get a poster frame; MOV
+  and HEVC videos get an H.264 MP4 copy so they play in every browser (iPhone
+  HDR video is tone-mapped). MP4/WebM that already play are served as-is, with
+  seeking.
+- Processing runs in the background, one file at a time: the pin appears as
   soon as the upload finishes and the thumbnail follows a moment later.
-- Uploading the exact same file twice just points at the existing one.
-- If a file couldn't be processed, the viewer says why, and it's retried
+- If a file can't be processed, the viewer says why, and it's retried
   automatically the next time the app starts (e.g. after an update).
-- Place names ("Osaka, Japan") are worked out offline from bundled GeoNames
-  and Natural Earth data. Nothing is sent to any third-party service, and the page loads
-  no external fonts, scripts or maps.
+- Place names ("Osaka, Japan") are worked out offline from bundled GeoNames and
+  Natural Earth data.
 
 ## Development
 
-Requires Node 22+. Video support needs `ffmpeg` (Debian/Ubuntu:
-`apt-get install ffmpeg`; macOS: `brew install ffmpeg`); without it videos
-upload and get pinned but have no thumbnail. HEIC works out of the box via a
-bundled WebAssembly decoder; installing libheif's `heif-dec`/`heif-convert`
-(`libheif-examples`, plus `libheif-plugin-libde265` on Ubuntu 24.04+/Debian
-trixie+; `brew install libheif` on macOS) makes it faster.
+You only need this to change the app itself. Node 22+ is required; `ffmpeg`
+is needed for video thumbnails (HEIC works without extra tools).
 
 ```bash
 npm install
-npm run dev     # http://localhost:5173 (server on :3000, data in server/data)
+npm run dev     # http://localhost:5173 (API on :3000, data in server/data)
 npm run check   # typecheck + tests (server and web)
 npm run build && npm start   # production build on :3000
 ```
 
-Pass the same env vars to try the login and title locally, e.g.
+Pass the same environment variables to try the login and title locally, e.g.
 `APP_PASSWORD=stardust PLANET_TITLE="Our Planet" npm run dev`.
 
-The planet's geography is generated from Natural Earth land and lakes by
-`npm run earth -w web -- <folder>` (download instructions at the top of
-`web/scripts/make-earth.ts`), the icons by `npm run icons -w web`, and the place-name
-data by `npm run places -w server` (instructions at the top of
-`server/scripts/make-places.ts`); the outputs are committed, so you only need
-these if you change them.
+**Run your own build in Docker**, instead of the published image:
 
-## Credits
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
 
-Geography: [Natural Earth](https://www.naturalearthdata.com/) (public domain),
-via [world-atlas](https://github.com/topojson/world-atlas).
-Place names: [GeoNames](https://www.geonames.org/) (CC BY 4.0).
-Pixel font: [Silkscreen](https://kottke.org/plus/type/silkscreen/) by Jason
-Kottke (SIL Open Font License), via Fontsource.
+**Generated data.** The planet's geography (`npm run earth -w web -- <dir>`),
+the icons and logo (`npm run icons -w web`) and the place names
+(`npm run places -w server -- <dir>`) are committed; each script's header says
+where to download its inputs.
+
+**Design notes.** [docs/SPEC.md](docs/SPEC.md) describes the features, design
+direction and implementation decisions.
+
+**CI and releases.** Pull requests run the tests (and check that the
+`package.json` versions match and have a changelog entry). Every push to
+`main` runs the tests again, then:
+
+- if the version in `package.json` is new (no `vX.Y.Z` tag yet), it
+  **releases**: builds the `amd64` and `arm64` image, pushes it to ghcr.io with
+  the version tags above, smoke-tests it, tags the commit and publishes a GitHub
+  Release with the changelog notes;
+- otherwise it just builds and smoke-tests the image.
+
+So to release, add the version's notes to [CHANGELOG.md](CHANGELOG.md), bump
+`version` in the three `package.json` files (`npm version 1.1.0 -ws
+--include-workspace-root --no-git-tag-version`), and merge. Versions with a
+suffix (`1.1.0-rc.1`) become pre-releases and don't move `:latest`.
+
+**Security.** Please report vulnerabilities privately; see
+[SECURITY.md](SECURITY.md).
+
+## License and credits
+
+Photo Planet is [MIT licensed](LICENSE).
+
+It's built on Natural Earth geography (public domain), GeoNames place names
+(CC BY 4.0), the Silkscreen pixel font (SIL OFL) and open-source libraries
+including Fastify, sharp, libheif and FFmpeg. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the full list and their
+licenses.

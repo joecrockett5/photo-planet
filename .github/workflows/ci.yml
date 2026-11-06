@@ -1,11 +1,17 @@
 name: CI
 
 # Pull requests: tests only, once per change (no separate branch-push run).
-# main: tests, then the Docker image build and smoke test.
+# main: tests, then either
+#  - a release, when package.json has a version that has no vX.Y.Z tag yet
+#    (see release.yml: multi-arch image on ghcr.io, tag, GitHub Release), or
+#  - otherwise, a local image build and smoke test.
 on:
   push:
     branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 # A newer push to a pull request cancels its run in progress; main runs to completion.
 concurrency:
@@ -15,21 +21,88 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # normally ~1 min; don't let a stuck mirror hold a run for half an hour
+    timeout-minutes: 15
+    env:
+      # exercised by the server tests
+      APT_PACKAGES: ffmpeg libheif-examples libheif-plugin-libde265
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      # ffmpeg and libheif are exercised by the server tests
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg libheif-examples libheif-plugin-libde265
+      - name: Versions agree and have changelog notes
+        run: |
+          v=$(node -p 'require("./package.json").version')
+          for p in server web; do
+            pv=$(node -p "require('./$p/package.json').version")
+            [ "$pv" = "$v" ] || { echo "::error::$p/package.json is $pv, root is $v"; exit 1; }
+          done
+          grep -q "^## \[$v\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## [$v]' section"; exit 1; }
+          echo "version $v"
+      # The runners' Ubuntu mirror is sometimes very slow (~50 kB/s, which turns
+      # the 20 s ffmpeg install into 30 min), so the downloaded .debs are cached,
+      # keyed on the exact versions apt resolves: a normal run downloads nothing,
+      # and after an Ubuntu update only the changed packages are fetched.
+      - name: Resolve system packages
+        id: apt
+        run: |
+          sudo apt-get update -qq
+          v=$(apt-get install -s --no-install-recommends $APT_PACKAGES | grep '^Inst' | sha256sum | cut -c1-16)
+          echo "key=apt-${{ runner.os }}-${{ runner.arch }}-$v" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/apt-archives
+          key: ${{ steps.apt.outputs.key }}
+          restore-keys: apt-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install ffmpeg and libheif
+        run: |
+          mkdir -p ~/apt-archives/partial
+          opts=(-o Dir::Cache::Archives="$HOME/apt-archives" -o APT::Keep-Downloaded-Packages=true)
+          sudo apt-get install -y --no-install-recommends "${opts[@]}" $APT_PACKAGES
+          sudo apt-get autoclean -qq "${opts[@]}"   # drop superseded versions
+          sudo rm -rf ~/apt-archives/lock ~/apt-archives/partial
+          sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
       - run: npm ci
       - run: npm run check
       - run: npm run build
 
-  docker:
+  # main only: is this version new (no tag yet)?
+  version:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: check
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          v=$(node -p 'require("./package.json").version')
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$v" >/dev/null; then
+            echo "v$v is already released"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "v$v is new: releasing"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    permissions:
+      contents: write # tag + GitHub Release
+      packages: write # push to ghcr.io
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  docker:
+    needs: version
+    if: needs.version.outputs.release == 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
