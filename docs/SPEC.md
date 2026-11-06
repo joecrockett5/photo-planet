@@ -314,7 +314,9 @@ deliberately differs. Revisit any of them freely.
   cloud buttons) opens every upload in the gallery panel, newest first,
   grouped by the local day it was uploaded ("Today", "Yesterday", "5 Nov
   2026 · 12 uploads"); tapping one opens the viewer. Live while open; shows
-  240 at a time with "show more" for big libraries.
+  240 at a time with "show more" for big libraries. On wide screens, while
+  any side panel is open the top-right buttons slide left to sit beside it,
+  the same distance from its edge as from the screen's.
 - **Keyboard:** arrow keys spin, `+`/`-` zoom, Esc closes things, ←/→ in the viewer.
 
 ## Non-goals (v1)

@@ -8,6 +8,8 @@
   --sar: env(safe-area-inset-right, 0px);
   /* distance of the top corner text and buttons from the screen edges */
   --edge: var(--gap);
+  /* width of the gallery/tray/feed side panel on wide screens */
+  --panel-w: min(420px, 42vw);
   --px: 4px; /* CSS px per art pixel; set from JS */
   --tpx: 2px; /* CSS px per text pixel (Silkscreen is drawn on an 8px em) */
   --gap: calc(var(--px) * 3);
@@ -151,6 +153,15 @@ a:focus-visible {
   right: calc(var(--edge) - 4px + var(--sar));
   top: calc(var(--edge) - 10px + var(--sat));
   display: flex;
+  /* slide with the side panel (same stepped timing) */
+  transition: right 0.24s steps(6);
+}
+/* Wide screens: while the side panel is open, keep the buttons in view,
+   the same distance from the panel's edge as from the screen's. */
+@media (min-width: 720px) {
+  body.gallery-open .corner-buttons {
+    right: calc(var(--panel-w) + var(--edge) - 4px);
+  }
 }
 .corner-buttons .icon-button {
   min-width: 36px; /* two side by side, still easy to hit */
@@ -241,7 +252,7 @@ body.dropping::after {
     left: auto;
     top: 0;
     height: auto;
-    width: min(420px, 42vw);
+    width: var(--panel-w);
     border-top-width: 0;
     border-left-width: var(--px);
     transform: translateX(100%);
