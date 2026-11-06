@@ -1,0 +1,9 @@
+# Build the image from this source checkout instead of pulling a release:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  photo-planet:
+    image: photo-planet:local
+    build:
+      context: .
+      args:
+        APP_VERSION: local

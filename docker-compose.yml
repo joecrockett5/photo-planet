@@ -1,7 +1,10 @@
+# Photo Planet: no source code needed. Put this file (and optionally a .env,
+# see .env.example) in a folder, then:  docker compose up -d
+# Update later with:                     docker compose pull && docker compose up -d
 services:
   photo-planet:
-    build: .
-    image: photo-planet
+    # Pin a version (e.g. :1.0.0, or :1 for 1.x updates), or use :latest
+    image: ghcr.io/joecrockett5/photo-planet:${PHOTO_PLANET_VERSION:-latest}
     restart: unless-stopped
     ports:
       - "${HOST_PORT:-8080}:3000"

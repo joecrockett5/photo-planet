@@ -15,7 +15,8 @@ design change.
 server/   Fastify + TypeScript API, serves the built frontend in production
 web/      Vite + TypeScript frontend (vanilla TS + canvas, no UI framework)
 docs/     SPEC.md
-Dockerfile, docker-compose.yml   single-container deploy, state in /data volume
+Dockerfile, docker-compose.yml   single-container deploy (multi-arch image on ghcr.io), state in /data volume
+.github/workflows/  ci.yml (tests on PRs; + image on main), release.yml (tag vX.Y.Z → ghcr + GitHub Release)
 ```
 
 npm workspaces: run everything from the repo root.
@@ -28,7 +29,8 @@ npm run dev          # server on :3000 (tsx watch) + Vite on :5173 (proxies /api
 npm run build        # build web then server
 npm start            # run the built app on :3000 (serves web/dist)
 npm run check        # typecheck + tests for all workspaces; must pass before committing
-docker compose up --build   # full production-like run on :8080
+docker compose -f docker-compose.yml -f docker-compose.build.yml up --build   # build this checkout as the image, on :8080
+# (plain `docker compose up` pulls the published release from ghcr.io)
 npm run earth -w web -- <natural earth dir>  # regenerate the planet's geography (see script header)
 npm run icons -w web # regenerate favicon/touch icon from the planet renderer
 npm run places -w server -- <geonames dir>  # regenerate place-name data (see script header)
@@ -59,6 +61,12 @@ than crash. In a fresh Linux sandbox:
 `apt-get install -y ffmpeg libheif-examples` (on Ubuntu 24.04+/Debian trixie+ also
 `libheif-plugin-libde265`, or heif-convert can't decode HEIC).
 
+## Releases
+
+Versioned images are published to `ghcr.io/joecrockett5/photo-planet` by pushing a
+`vX.Y.Z` tag (see README "Releasing"). Add the notes to `CHANGELOG.md` and bump the
+`version` in the three `package.json` files first.
+
 ## Conventions
 
 - TypeScript strict mode everywhere, ES modules.
@@ -76,7 +84,7 @@ than crash. In a fresh Linux sandbox:
 - `npm run check` must pass.
 - For UI work, run `npm run dev` and look at it in a browser (desktop and a
   ~375px-wide mobile viewport) before calling it done. Take screenshots if you can.
-- If Docker is available, `docker compose up --build` and hit
+- If Docker is available, build with the compose command above and hit
   `http://localhost:8080/api/health`. If Docker is not available in your
   environment, say so; CI (`.github/workflows/ci.yml`) runs the tests on every pull
   request and also builds and smoke-tests the image on pushes to `main`.

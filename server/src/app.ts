@@ -65,7 +65,7 @@ export function buildApp(overrides: Partial<Config> = {}) {
   // Media files (with range support, for video seeking). `serve: false`: only via reply.sendFile.
   app.register(fastifyStatic, { root: storage.root, serve: false });
 
-  app.get('/api/health', async () => ({ ok: true }));
+  app.get('/api/health', async () => ({ ok: true, version: config.version }));
 
   app.get('/api/config', async (req) => ({
     title: config.planetTitle,

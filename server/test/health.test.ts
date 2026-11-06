@@ -8,7 +8,7 @@ describe('api', () => {
   it('reports health', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/health' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true });
+    expect(res.json()).toEqual({ ok: true, version: expect.any(String) });
   });
 
   it('reports config', async () => {

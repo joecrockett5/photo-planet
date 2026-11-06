@@ -18,6 +18,8 @@ export interface Config {
   planetTitle: string;
   maxUploadMb: number;
   webDist: string;
+  /** Set at image build time (the release tag), "dev" otherwise. */
+  version: string;
 }
 
 /** The only place env vars are read. */
@@ -31,4 +33,5 @@ export const config: Config = {
   maxUploadMb: numberFrom(env.MAX_UPLOAD_MB, 500),
   // Built frontend; served in production only (in dev, Vite serves it).
   webDist: path.resolve(env.WEB_DIST ?? fileURLToPath(new URL('../../web/dist', import.meta.url))),
+  version: env.APP_VERSION || 'dev',
 };
