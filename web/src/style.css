@@ -277,6 +277,14 @@ body.dropping::after {
   scrollbar-color: var(--c-starDim) transparent;
   overscroll-behavior: contain;
 }
+.gallery-empty {
+  margin-top: var(--gap);
+  color: var(--c-starMid);
+}
+.gallery-more {
+  display: block;
+  margin: var(--gap) auto 0;
+}
 .gallery-day {
   color: var(--c-starMid);
   margin: var(--gap) 0 calc(var(--px) * 2);

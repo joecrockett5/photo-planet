@@ -1,12 +1,19 @@
 import type { MediaItem } from '../api';
-import { byDate, dayKey, describeItems, formatDay, formatDuration } from '../format';
+import { byDate, byUploadNewest, dayKey, describeItems, formatDay, formatDuration, formatUploadDay, plural, uploadDayKey } from '../format';
 import { h } from './dom';
 import { icon } from './icons';
 import { placeName } from './place';
 
+type Mode = 'place' | 'tray' | 'feed';
+/** The feed renders this many thumbnails at a time ("show more" for the rest). */
+const FEED_PAGE = 240;
+
 /**
- * The items at one place: a side panel on wide screens, a bottom sheet on
- * phones. Thumbnails grouped by day, oldest first.
+ * A panel of thumbnails: a side panel on wide screens, a bottom sheet on
+ * phones. Three uses:
+ *  - place: the items at one pin, grouped by the day they were taken
+ *  - tray:  everything without a location (live), with select/place/delete
+ *  - feed:  every upload, newest first, grouped by the day it was uploaded (live)
  */
 export class Gallery {
   readonly el: HTMLElement;
@@ -34,9 +41,12 @@ export class Gallery {
   private allButton: HTMLButtonElement;
   /** Which items belong here, given the full list (for live updates). */
   private keep: (item: MediaItem) => boolean = (i) => i.lat !== null;
-  private fixedTitle: string | null = null;
-  /** Unplaced tray mode: show every item matching `keep`, not a fixed set. */
-  private live = false;
+  private mode: Mode = 'place';
+  /** Tray and feed show every item matching `keep` (live), not a fixed set. */
+  private get live(): boolean {
+    return this.mode !== 'place';
+  }
+  private feedLimit = FEED_PAGE;
 
   constructor(parent: HTMLElement) {
     const close = h('button.icon-button.gallery-close', { 'aria-label': 'Close', onclick: () => this.close() }, icon('close'));
@@ -66,8 +76,7 @@ export class Gallery {
   /** The items at a place. */
   open(items: MediaItem[]): void {
     this.keep = (i) => i.lat !== null;
-    this.live = false;
-    this.fixedTitle = null;
+    this.mode = 'place';
     this.show(items);
     this.title.textContent = placeName(items) || 'Somewhere';
   }
@@ -75,23 +84,36 @@ export class Gallery {
   /** The unplaced tray: everything without a location. */
   openTray(all: MediaItem[]): void {
     this.keep = (i) => i.lat === null;
-    this.live = true;
-    this.fixedTitle = 'Unplaced';
-    this.title.textContent = this.fixedTitle;
+    this.mode = 'tray';
+    this.title.textContent = 'Unplaced';
     this.show(all.filter(this.keep));
   }
 
+  /** The uploads feed: everything, newest upload first. */
+  openFeed(all: MediaItem[]): void {
+    this.keep = () => true;
+    this.mode = 'feed';
+    this.feedLimit = FEED_PAGE;
+    this.title.textContent = 'Uploads';
+    this.show(all);
+  }
+
   get isTray(): boolean {
-    return this.isOpen && this.live;
+    return this.isOpen && this.mode === 'tray';
+  }
+
+  get isFeed(): boolean {
+    return this.isOpen && this.mode === 'feed';
   }
 
   private show(items: MediaItem[]) {
     this.selected = null;
-    this.selectButton.hidden = !this.live;
+    this.selectButton.hidden = this.mode !== 'tray';
     this.ids = items.map((i) => i.id);
     this.isOpen = true;
     this.el.hidden = false;
-    this.el.classList.toggle('tray', this.live);
+    this.el.classList.toggle('tray', this.mode === 'tray');
+    this.el.setAttribute('aria-label', this.mode === 'feed' ? 'Uploads' : this.mode === 'tray' ? 'Unplaced' : 'Photos here');
     this.render(items);
     this.grid.scrollTop = 0;
     requestAnimationFrame(() => this.el.classList.add('open'));
@@ -105,7 +127,7 @@ export class Gallery {
       ? all.filter(this.keep)
       : this.ids.map((id) => byId.get(id)).filter((i): i is MediaItem => !!i && this.keep(i));
     this.ids = items.map((i) => i.id);
-    if (!items.length) return this.close();
+    if (!items.length && this.mode !== 'feed') return this.close();
     if (this.selected) for (const id of [...this.selected]) if (!this.ids.includes(id)) this.selected.delete(id);
     this.render(items);
   }
@@ -173,6 +195,7 @@ export class Gallery {
   }
 
   private render(items: MediaItem[]) {
+    if (this.mode === 'feed') return this.renderFeed(items);
     this.items = [...items].sort(byDate);
     this.sub.textContent = this.live
       ? `${describeItems(this.items)} without a location. Open one to place it, or select several`
@@ -191,6 +214,45 @@ export class Gallery {
       const row = h('div.gallery-thumbs');
       for (const item of dayItems) row.append(this.thumb(item));
       frag.append(row);
+    }
+    this.grid.replaceChildren(frag);
+    this.renderSelection();
+  }
+
+  /** Every upload, newest first, under the (local) day it was uploaded. */
+  private renderFeed(items: MediaItem[]) {
+    this.items = [...items].sort(byUploadNewest);
+    this.sub.textContent = this.items.length ? `${describeItems(this.items)} · newest first` : '';
+    const shown = this.items.slice(0, this.feedLimit);
+    const groups = new Map<string, MediaItem[]>();
+    for (const item of shown) {
+      const key = uploadDayKey(item);
+      groups.set(key, [...(groups.get(key) ?? []), item]);
+    }
+    // the day's full count, even if only some of it is shown so far
+    const totals = new Map<string, number>();
+    for (const item of this.items) totals.set(uploadDayKey(item), (totals.get(uploadDayKey(item)) ?? 0) + 1);
+    const frag = document.createDocumentFragment();
+    if (!this.items.length) frag.append(h('p.gallery-empty', {}, 'Nothing uploaded yet. Tap + to add photos'));
+    for (const [day, dayItems] of groups) {
+      frag.append(h('h3.gallery-day', {}, `${formatUploadDay(day)} · ${plural(totals.get(day) ?? dayItems.length, 'upload')}`));
+      const row = h('div.gallery-thumbs');
+      for (const item of dayItems) row.append(this.thumb(item));
+      frag.append(row);
+    }
+    if (this.items.length > shown.length) {
+      frag.append(
+        h(
+          'button.text-button.gallery-more',
+          {
+            onclick: () => {
+              this.feedLimit += FEED_PAGE;
+              this.render(this.items);
+            },
+          },
+          `show more (${this.items.length - shown.length} older)`,
+        ),
+      );
     }
     this.grid.replaceChildren(frag);
     this.renderSelection();

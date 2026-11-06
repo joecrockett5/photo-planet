@@ -310,6 +310,11 @@ deliberately differs. Revisit any of them freely.
   Viewer media is sized explicitly (absolute + `object-fit: contain`) because
   iOS Safari ignores `max-height: 100%` inside a flex item, letting tall
   photos run off the top; a tap on the letterbox still closes the viewer.
+- **Uploads feed:** a small list button (top right, beside the twinkle and
+  cloud buttons) opens every upload in the gallery panel, newest first,
+  grouped by the local day it was uploaded ("Today", "Yesterday", "5 Nov
+  2026 · 12 uploads"); tapping one opens the viewer. Live while open; shows
+  240 at a time with "show more" for big libraries.
 - **Keyboard:** arrow keys spin, `+`/`-` zoom, Esc closes things, ←/→ in the viewer.
 
 ## Non-goals (v1)

@@ -42,3 +42,26 @@ export function describeItems(items: MediaItem[]): string {
   if (!photos) return plural(videos, 'video');
   return `${plural(photos, 'photo')}, ${plural(videos, 'video')}`;
 }
+
+/** The local calendar day an item was uploaded, as YYYY-MM-DD (in the viewer's timezone). */
+export function uploadDayKey(item: Pick<MediaItem, 'uploadedAt'>): string {
+  const d = new Date(item.uploadedAt);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** "Today", "Yesterday" or "5 Nov 2026" for a YYYY-MM-DD local day. */
+export function formatUploadDay(key: string, now = new Date()): string {
+  if (!key) return 'Some time ago';
+  const today = uploadDayKey({ uploadedAt: now.toISOString() });
+  const y = new Date(now);
+  y.setDate(y.getDate() - 1);
+  if (key === today) return 'Today';
+  if (key === uploadDayKey({ uploadedAt: y.toISOString() })) return 'Yesterday';
+  return formatDay(key);
+}
+
+/** Newest upload first (ties: newest id order is stable via name). */
+export function byUploadNewest(a: MediaItem, b: MediaItem): number {
+  return a.uploadedAt < b.uploadedAt ? 1 : a.uploadedAt > b.uploadedAt ? -1 : a.name.localeCompare(b.name);
+}
