@@ -1,11 +1,17 @@
 name: CI
 
 # Pull requests: tests only, once per change (no separate branch-push run).
-# main: tests, then the Docker image build and smoke test.
+# main: tests, then either
+#  - a release, when package.json has a version that has no vX.Y.Z tag yet
+#    (see release.yml: multi-arch image on ghcr.io, tag, GitHub Release), or
+#  - otherwise, a local image build and smoke test.
 on:
   push:
     branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 # A newer push to a pull request cancels its run in progress; main runs to completion.
 concurrency:
@@ -21,15 +27,56 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Versions agree and have changelog notes
+        run: |
+          v=$(node -p 'require("./package.json").version')
+          for p in server web; do
+            pv=$(node -p "require('./$p/package.json').version")
+            [ "$pv" = "$v" ] || { echo "::error::$p/package.json is $pv, root is $v"; exit 1; }
+          done
+          grep -q "^## \[$v\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## [$v]' section"; exit 1; }
+          echo "version $v"
       # ffmpeg and libheif are exercised by the server tests
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg libheif-examples libheif-plugin-libde265
       - run: npm ci
       - run: npm run check
       - run: npm run build
 
-  docker:
+  # main only: is this version new (no tag yet)?
+  version:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: check
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          v=$(node -p 'require("./package.json").version')
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$v" >/dev/null; then
+            echo "v$v is already released"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "v$v is new: releasing"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    permissions:
+      contents: write # tag + GitHub Release
+      packages: write # push to ghcr.io
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  docker:
+    needs: version
+    if: needs.version.outputs.release == 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

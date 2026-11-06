@@ -16,7 +16,7 @@ server/   Fastify + TypeScript API, serves the built frontend in production
 web/      Vite + TypeScript frontend (vanilla TS + canvas, no UI framework)
 docs/     SPEC.md
 Dockerfile, docker-compose.yml   single-container deploy (multi-arch image on ghcr.io), state in /data volume
-.github/workflows/  ci.yml (tests on PRs; + image on main), release.yml (tag vX.Y.Z → ghcr + GitHub Release)
+.github/workflows/  ci.yml (tests on PRs; on main: release if the version is new, else image smoke test), release.yml (called by ci.yml: ghcr + tag + GitHub Release)
 ```
 
 npm workspaces: run everything from the repo root.
@@ -63,9 +63,12 @@ than crash. In a fresh Linux sandbox:
 
 ## Releases
 
-Versioned images are published to `ghcr.io/joecrockett5/photo-planet` by pushing a
-`vX.Y.Z` tag (see README "Releasing"). Add the notes to `CHANGELOG.md` and bump the
-`version` in the three `package.json` files first.
+Versioned images are published to `ghcr.io/joecrockett5/photo-planet` automatically
+when a push to `main` carries a `package.json` version that has no `vX.Y.Z` tag yet
+(see README "CI and releases"). To release: add a `## [X.Y.Z]` section to
+`CHANGELOG.md` and bump `version` in all three `package.json` files (CI checks they
+agree). Don't push tags by hand; CI creates them. Changes that shouldn't release can
+merge without a bump (put notes under `## [Unreleased]`).
 
 ## Conventions
 

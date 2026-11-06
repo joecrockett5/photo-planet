@@ -11,7 +11,6 @@
 
 <p align="center">
   <a href="https://github.com/joecrockett5/photo-planet/actions/workflows/ci.yml"><img src="https://github.com/joecrockett5/photo-planet/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <a href="https://github.com/joecrockett5/photo-planet/actions/workflows/release.yml"><img src="https://github.com/joecrockett5/photo-planet/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <a href="https://github.com/joecrockett5/photo-planet/releases"><img src="https://img.shields.io/badge/version-1.0.0-5a6fd8" alt="Version 1.0.0"></a>
   <a href="https://github.com/joecrockett5/photo-planet/pkgs/container/photo-planet"><img src="https://img.shields.io/badge/ghcr.io-photo--planet-2496ED?logo=docker&amp;logoColor=white" alt="Container image on ghcr.io"></a>
   <img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-555" alt="Platforms: amd64 and arm64">
@@ -270,19 +269,20 @@ where to download its inputs.
 **Design notes.** [docs/SPEC.md](docs/SPEC.md) describes the features, design
 direction and implementation decisions.
 
-**CI.** Pull requests run the tests. Pushes to `main` also build and
-smoke-test the image.
+**CI and releases.** Pull requests run the tests (and check that the
+`package.json` versions match and have a changelog entry). Every push to
+`main` runs the tests again, then:
 
-**Releasing.** Add the version's notes to [CHANGELOG.md](CHANGELOG.md), bump
-`version` in the `package.json` files, merge, then tag:
+- if the version in `package.json` is new (no `vX.Y.Z` tag yet), it
+  **releases**: builds the `amd64` and `arm64` image, pushes it to ghcr.io with
+  the version tags above, smoke-tests it, tags the commit and publishes a GitHub
+  Release with the changelog notes;
+- otherwise it just builds and smoke-tests the image.
 
-```bash
-git tag v1.1.0 && git push origin v1.1.0
-```
-
-The [release workflow](.github/workflows/release.yml) runs the tests, builds
-the `amd64` and `arm64` image, pushes it to ghcr.io with the version tags
-above, smoke-tests it, and publishes a GitHub Release with the changelog notes.
+So to release, add the version's notes to [CHANGELOG.md](CHANGELOG.md), bump
+`version` in the three `package.json` files (`npm version 1.1.0 -ws
+--include-workspace-root --no-git-tag-version`), and merge. Versions with a
+suffix (`1.1.0-rc.1`) become pre-releases and don't move `:latest`.
 
 **Security.** Please report vulnerabilities privately; see
 [SECURITY.md](SECURITY.md).

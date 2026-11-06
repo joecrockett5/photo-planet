@@ -1,40 +1,27 @@
 name: Release
 
-# Push a version tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`) to:
-#  1. run the tests,
-#  2. build the image for linux/amd64 and linux/arm64 and push it to
+# Called by ci.yml on a push to main whose package.json version has no tag yet
+# (the tests have already passed there). It:
+#  1. builds the image for linux/amd64 and linux/arm64 and pushes it to
 #     ghcr.io/<owner>/photo-planet as :1.0.0, :1.0, :1 and :latest,
-#  3. smoke-test the published image,
-#  4. publish a GitHub Release with that version's notes from CHANGELOG.md.
+#  2. smoke-tests the published image,
+#  3. tags the commit vX.Y.Z and publishes a GitHub Release with that
+#     version's notes from CHANGELOG.md.
+# Pre-release versions (1.1.0-rc.1) get only their exact tag and a pre-release.
 on:
-  push:
-    tags: ['v*.*.*']
-
-permissions:
-  contents: write # create the GitHub Release
-  packages: write # push to ghcr.io
+  workflow_call:
+    inputs:
+      version:
+        description: Version to release, without the v (e.g. 1.0.0)
+        required: true
+        type: string
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg libheif-examples libheif-plugin-libde265
-      - run: npm ci
-      - run: npm run check
-
   image:
-    needs: test
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -48,12 +35,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          # semver {{major}} / {{major}}.{{minor}} are skipped for pre-releases
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-          # :latest follows the newest non-prerelease tag
-          flavor: latest=auto
+            type=semver,pattern={{version}},value=v${{ inputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ inputs.version }}
+            type=semver,pattern={{major}},value=v${{ inputs.version }}
+            type=raw,value=latest,enable=${{ !contains(inputs.version, '-') }}
+          flavor: latest=false
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -61,13 +49,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: APP_VERSION=${{ steps.meta.outputs.version }}
+          build-args: APP_VERSION=${{ inputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Smoke test the published image
         env:
-          IMAGE: ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
-          VERSION: ${{ steps.meta.outputs.version }}
+          IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.version }}
+          VERSION: ${{ inputs.version }}
         run: |
           docker run -d --name pp -p 8080:3000 "$IMAGE"
           for i in $(seq 1 30); do
@@ -76,14 +64,14 @@ jobs:
           done
           docker logs pp; exit 1
 
-  release:
+  github-release:
     needs: image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Release notes from CHANGELOG.md
         env:
-          VERSION: ${{ needs.image.outputs.version }}
+          VERSION: ${{ inputs.version }}
         run: |
           # the section under "## [VERSION]", up to the next section or the link list
           awk -v v="$VERSION" '
@@ -100,11 +88,12 @@ jobs:
             echo '```'
           } >> notes.md
           cat notes.md
-      - name: Publish the GitHub Release
+      - name: Tag and publish the GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          TAG: v${{ inputs.version }}
         run: |
           prerelease=""
           case "$TAG" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$TAG" --title "Photo Planet $TAG" --notes-file notes.md --verify-tag $prerelease
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "Photo Planet $TAG" \
+            --notes-file notes.md $prerelease
