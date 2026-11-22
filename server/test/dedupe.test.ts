@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -93,6 +93,12 @@ describe('fingerprints', () => {
     expect(hashDistance(a.phash, b.phash)).toBeLessThanOrEqual(3);
     expect(colorDistance(a.color, b.color)).toBeLessThan(5);
     expect(hashDistance(a.phash, c.phash)).toBeGreaterThan(12);
+  });
+
+  it('leave out nearly flat images, whose hash would be noise', async () => {
+    const dark = await sharp({ create: { width: 640, height: 360, channels: 3, background: '#060606' } }).jpeg().toBuffer();
+    expect((await fingerprint(dark)).phash).toBe('');
+    expect(matchScore(row({ phash: '' }), row({ phash: '' }))).toBeNull();
   });
 
   it('counts differing bits', () => {
@@ -295,6 +301,125 @@ describe('duplicate uploads', () => {
     expect(existsSync(trash(copy2))).toBe(false);
     const undo = await app.inject({ method: 'POST', url: '/api/merges/undo', payload: { ids: [1, 2] } });
     expect(undo.statusCode).toBe(404);
+  });
+
+  it('keeps burst shots apart even when an undated copy resembles both', async () => {
+    const real = app.ctx.extractMetadata;
+    let subsec: string | null = '100';
+    app.ctx.extractMetadata = async (file, kind) => ({
+      ...(await real(file, kind)),
+      ...(subsec ? { takenAt: '2024-05-01T10:00:00', takenSubsec: subsec } : {}),
+    });
+    const shot = await scene(12);
+    const a = await upload('IMG_0100.JPG', shot);
+    subsec = '300';
+    const b = await upload('IMG_0101.JPG', await sharp(shot).jpeg({ quality: 88 }).toBuffer());
+    subsec = null;
+    await upload('IMG-WA0100.jpg', await whatsapp(shot));
+    // the copy goes into one of them, but the two shots stay
+    const ids = (await list()).items.map((i: { id: string }) => i.id);
+    expect(ids.sort()).toEqual([a, b].sort());
+  });
+
+  // The file moves are awaited, so other requests can run in the middle of a merge.
+  function duringMove(fn: (row: MediaRow) => unknown) {
+    const d = app.ctx.deduper as unknown as { moveFiles: (row: MediaRow, dir: string) => Promise<void> };
+    const move = d.moveFiles.bind(d);
+    let once = false;
+    d.moveFiles = async (row, dir) => {
+      await move(row, dir);
+      if (dir === 'to-trash' && !once) {
+        once = true;
+        await fn(row);
+      }
+    };
+  }
+
+  it('keeps a location set on the kept item during the merge', async () => {
+    const original = await scene(13);
+    await upload('wa.jpg', await whatsapp(original));
+    let kept = '';
+    duringMove(async () => {
+      kept = (await list()).items.find((i: { name: string }) => i.name === 'orig.jpg').id;
+      await app.inject({ method: 'PATCH', url: `/api/media/${kept}`, payload: { lat: 5, lon: 5 } });
+    });
+    await upload('orig.jpg', original);
+    expect((await list()).items).toEqual([expect.objectContaining({ id: kept, lat: 5, lon: 5 })]);
+  });
+
+  it('finishes deleting a copy deleted during the merge', async () => {
+    const original = await scene(14);
+    const id = await upload('orig.jpg', original);
+    let deleted: Promise<unknown> = Promise.resolve();
+    duringMove(async (row) => {
+      // (the request then waits for the merge to finish)
+      deleted = app.inject({ method: 'DELETE', url: `/api/media/${row.id}` });
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    const copy = await upload('wa.jpg', await whatsapp(original));
+    await deleted;
+    expect((await list())).toEqual({ items: [expect.objectContaining({ id })], merges: [] });
+    expect(readdirSync(app.ctx.storage.originalsDir)).toHaveLength(1);
+    expect(existsSync(trash(copy))).toBe(false);
+  });
+
+  it('keeps the copy when the item it would merge into is deleted during the merge', async () => {
+    const original = await scene(15);
+    const id = await upload('orig.jpg', original);
+    let deleted: Promise<unknown> = Promise.resolve();
+    duringMove(async () => {
+      deleted = app.inject({ method: 'DELETE', url: `/api/media/${id}` });
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    const copy = await upload('wa.jpg', await whatsapp(original));
+    await deleted;
+    expect((await list())).toEqual({ items: [expect.objectContaining({ id: copy, status: 'ready' })], merges: [] });
+    expect((await app.inject({ method: 'GET', url: `/media/${copy}/original` })).statusCode).toBe(200);
+    expect(existsSync(trash(copy))).toBe(false);
+  });
+
+  it('rolls back a merge, or finishes an undo, cut short by a restart', async () => {
+    const original = await scene(16);
+    const copy = await upload('wa.jpg', await whatsapp(original));
+    const id = await upload('orig.jpg', original);
+    const merge = app.ctx.db.prepare('SELECT * FROM merges').get() as { id: number; removed_row: string };
+    const removed = JSON.parse(merge.removed_row) as MediaRow;
+
+    // crashed after moving the copy's files, before the database said so
+    // (and so before the new upload was marked checked and ready)
+    app.ctx.repo.restore(removed);
+    app.ctx.repo.update(id, { status: 'processing', dedupe_pending: 1 });
+    app.ctx.db.prepare("UPDATE merges SET state = 'moving' WHERE id = ?").run(merge.id);
+    await app.ctx.deduper.recover();
+    expect(app.ctx.db.prepare('SELECT COUNT(*) AS n FROM merges').get()).toEqual({ n: 0 });
+    expect(existsSync(app.ctx.storage.abs(removed.original_path))).toBe(true);
+    expect(existsSync(trash(copy))).toBe(false);
+    // and the copy is checked again when the queue resumes
+    app.ctx.queue.resume();
+    await app.ctx.queue.idle();
+    const again = (await list()).merges;
+    expect(again).toEqual([expect.objectContaining({ keptId: id, removedId: copy })]);
+
+    // crashed half-way through an undo: the original was back, the row wasn't
+    const { rename } = await import('node:fs/promises');
+    await rename(path.join(trash(copy), removed.original_path), app.ctx.storage.abs(removed.original_path));
+    app.ctx.db.prepare("UPDATE merges SET state = 'restoring' WHERE id = ?").run(again[0].id);
+    await app.ctx.deduper.recover();
+    expect((await list()).items).toHaveLength(2);
+    expect((await app.inject({ method: 'GET', url: `/media/${copy}/thumb` })).statusCode).toBe(200);
+    expect(existsSync(trash(copy))).toBe(false);
+  });
+
+  it('does not purge a merge that was undone first', async () => {
+    const original = await scene(17);
+    await upload('wa.jpg', await whatsapp(original));
+    await upload('orig.jpg', original);
+    const [m] = (await list()).merges;
+    const undo = app.ctx.deduper.undo([m.id]);
+    const purged = app.ctx.deduper.purgeExpired(Date.now() + (TRASH_DAYS + 1) * 86_400_000);
+    expect((await undo).undone).toBe(1);
+    expect(await purged).toBe(0);
+    expect(app.ctx.db.prepare('SELECT state FROM merges').get()).toEqual({ state: 'undone' });
   });
 
   it.skipIf(!hasFfmpeg)('replaces a re-encoded video with the original', async () => {

@@ -7,7 +7,11 @@ import sharp from 'sharp';
  * recompression and stripped metadata.
  */
 export interface Fingerprint {
-  /** 64-bit DCT perceptual hash of the greyscale image, as 16 hex digits. */
+  /**
+   * 64-bit DCT perceptual hash of the greyscale image, as 16 hex digits; empty
+   * for a nearly flat image (a black frame, a plain sky), whose hash is noise:
+   * those are never matched.
+   */
   phash: string;
   /** 4×4 average RGB, as 96 hex digits. Catches pairs with the same shapes but different colours (a B&W edit). */
   color: string;
@@ -15,6 +19,8 @@ export interface Fingerprint {
 
 const N = 32; // DCT input size
 const K = 8; // low-frequency block kept
+/** Below this spread of grey levels (standard deviation, 0–255) an image is too flat to hash. Real photos measured 25+. */
+const MIN_CONTRAST = 8;
 
 // cos((2x+1)uπ / 2N), precomputed for the K lowest frequencies.
 const COS: Float64Array[] = Array.from({ length: K }, (_, u) => {
@@ -28,7 +34,18 @@ export async function fingerprint(image: string | Buffer): Promise<Fingerprint> 
     sharp(image).greyscale().resize(N, N, { fit: 'fill' }).raw().toBuffer(),
     sharp(image).removeAlpha().resize(4, 4, { fit: 'fill' }).toColourspace('srgb').raw().toBuffer(),
   ]);
-  return { phash: phashOf(grey), color: rgb.subarray(0, 48).toString('hex') };
+  return { phash: contrast(grey) < MIN_CONTRAST ? '' : phashOf(grey), color: rgb.subarray(0, 48).toString('hex') };
+}
+
+function contrast(pixels: Uint8Array): number {
+  let sum = 0;
+  let sq = 0;
+  for (const p of pixels) {
+    sum += p;
+    sq += p * p;
+  }
+  const mean = sum / pixels.length;
+  return Math.sqrt(Math.max(0, sq / pixels.length - mean * mean));
 }
 
 /** pHash of an N×N greyscale image: the K×K lowest DCT frequencies, each bit = above the median. */

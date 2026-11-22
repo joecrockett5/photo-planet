@@ -56,7 +56,7 @@ export class MediaRepo {
   /** Other fingerprinted items of the same kind: candidates for being a duplicate. */
   fingerprinted(kind: MediaRow['kind'], exceptId: string): MediaRow[] {
     return this.db
-      .prepare('SELECT * FROM media WHERE kind = ? AND phash IS NOT NULL AND color_sig IS NOT NULL AND id != ?')
+      .prepare('SELECT * FROM media WHERE kind = ? AND length(phash) > 0 AND color_sig IS NOT NULL AND id != ?')
       .all(kind, exceptId) as MediaRow[];
   }
 

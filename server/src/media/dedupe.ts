@@ -1,4 +1,4 @@
-import { mkdir, rename, rm } from 'node:fs/promises';
+import { access, mkdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 import type { DB } from '../db.js';
@@ -22,14 +22,19 @@ import type { LocationSource, MediaRow } from './types.js';
  * to trash/<id>/ for TRASH_DAYS so the merge can be undone.
  */
 
-/** Largest fingerprint distances still counted as the same picture. */
+/**
+ * Largest fingerprint distances still counted as the same picture. Measured on
+ * real photos and footage: messaging-app copies stay within hash 4 / colour 2.2
+ * (a video poster frame a few frames off: hash 8), while unrelated pictures sit
+ * around 32 / 60 and colour-graded or B&W edits at colour 10+ (kept apart).
+ */
 export const MATCH = {
-  photo: { hash: 6, color: 14 },
-  // a video's fingerprint is a single poster frame, so be stricter (duration must match too)
-  video: { hash: 4, color: 12 },
+  photo: { hash: 6, color: 4 },
+  // a video's fingerprint is a single poster frame, which may land a few frames off; its length must match too
+  video: { hash: 8, color: 4 },
 };
-/** Aspect ratios may differ by this much (|ln(a/b)|): a resize rounds to whole pixels. */
-const ASPECT_TOLERANCE = 0.02;
+/** Aspect ratios may differ by this much (|ln(a/b)|): a resize rounds to whole pixels, a 5% crop doesn't pass. */
+const ASPECT_TOLERANCE = 0.01;
 /** Pixel counts within this factor count as the same resolution. */
 const SAME_SIZE = 1.05;
 export const TRASH_DAYS = 30;
@@ -48,7 +53,8 @@ export interface MergeRow {
   kept_before: string;
   kept_after: string;
   created_at: string;
-  state: 'active' | 'undone' | 'purged';
+  /** moving/restoring: files are on their way to/from the trash (see recover()). */
+  state: 'moving' | 'active' | 'restoring' | 'undone' | 'purged';
 }
 
 /** What the API reports about a merge. */
@@ -70,7 +76,7 @@ export function matchScore(a: MediaRow, b: MediaRow): number | null {
 
   if (a.kind === 'video') {
     if (a.duration === null || b.duration === null) return null;
-    if (Math.abs(a.duration - b.duration) > Math.max(0.5, 0.02 * Math.max(a.duration, b.duration))) return null;
+    if (Math.abs(a.duration - b.duration) > Math.max(0.25, 0.01 * Math.max(a.duration, b.duration))) return null;
   } else if (!sameMoment(a, b)) {
     return null;
   }
@@ -189,8 +195,10 @@ export class Deduper {
       const row = this.repo.get(id);
       if (!row) return null;
       if (!row.dedupe_pending) return id;
-      this.repo.update(id, { dedupe_pending: 0 });
-      if (!row.phash) return id;
+      if (!row.phash) {
+        this.repo.update(id, { dedupe_pending: 0 });
+        return id;
+      }
 
       const undone = this.undonePairs();
       const matches = this.repo
@@ -199,39 +207,77 @@ export class Deduper {
         .filter((m): m is { other: MediaRow; score: number } => m.score !== null)
         .sort((a, b) => a.score - b.score);
 
-      let survivor: MediaRow = { ...row, dedupe_pending: 0 };
+      let survivor: MediaRow | null = row;
       for (const { other } of matches) {
+        if (!survivor) break;
         if (undone.has(pairKey(survivor.id, other.id))) continue;
         const current = this.repo.get(other.id);
-        if (!current) continue;
+        // once the upload has been dropped the survivor is an older item: it
+        // must match each further copy itself (two burst shots both resembling
+        // an undated copy are still two photos)
+        if (!current || matchScore(survivor, current) === null) continue;
         survivor = await this.merge(id, survivor, current);
       }
-      return survivor.id;
+      // cleared last, so a check cut short by a restart runs again
+      if (this.repo.get(id)) this.repo.update(id, { dedupe_pending: 0 });
+      return survivor?.id ?? null;
     });
   }
 
-  private async merge(uploadId: string, a: MediaRow, b: MediaRow): Promise<MediaRow> {
+  /**
+   * Hide `drop` in the trash and fold its location/date into `keep`. The
+   * merge is journalled ('moving') before any file moves, so `recover()` can
+   * roll back one a crash interrupted. Returns the item that remains (null if
+   * both were deleted meanwhile).
+   */
+  private async merge(uploadId: string, a: MediaRow, b: MediaRow): Promise<MediaRow | null> {
     const { keep, drop } = pickKeeper(a, b);
-    const before = fieldsOf(keep);
-    const after = mergedFields(keep, drop);
-    // the upload being checked is finished processing; if it's undone it comes back ready
-    const saved = drop.id === uploadId ? { ...drop, status: 'ready' as const, error: null } : drop;
-    const restoreFiles = await this.moveFiles(drop, 'to-trash');
+    const mergeId = Number(
+      this.db
+        .prepare(
+          `INSERT INTO merges (upload_id, kept_id, removed_id, removed_row, kept_before, kept_after, created_at, state)
+           VALUES (?, ?, ?, ?, '{}', '{}', ?, 'moving')`,
+        )
+        .run(uploadId, keep.id, drop.id, JSON.stringify(drop), new Date().toISOString()).lastInsertRowid,
+    );
+    const forgetMerge = () => this.db.prepare('DELETE FROM merges WHERE id = ?').run(mergeId);
     try {
-      this.db.transaction(() => {
-        if (!this.repo.get(keep.id) || !this.repo.get(drop.id)) throw new Error('changed during merge');
-        this.db
-          .prepare(
-            `INSERT INTO merges (upload_id, kept_id, removed_id, removed_row, kept_before, kept_after, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .run(uploadId, keep.id, drop.id, JSON.stringify(saved), JSON.stringify(before), JSON.stringify(after), new Date().toISOString());
-        this.repo.delete(drop.id);
-        this.repo.update(keep.id, after);
-      })();
+      await this.moveFiles(drop, 'to-trash');
     } catch (err) {
-      await restoreFiles();
+      await this.moveFiles(drop, 'from-trash').catch(() => undefined);
+      forgetMerge();
       throw err;
+    }
+
+    // read both again: a request may have changed or deleted either during the move
+    const outcome = this.db.transaction(() => {
+      const k = this.repo.get(keep.id);
+      const d = this.repo.get(drop.id);
+      if (!k || !d) return { k, d };
+      // the upload being checked has finished processing; if it's undone it comes back ready
+      const saved = d.id === uploadId ? { ...d, status: 'ready' as const, error: null } : d;
+      const after = mergedFields(k, d);
+      this.db
+        .prepare("UPDATE merges SET removed_row = ?, kept_before = ?, kept_after = ?, state = 'active' WHERE id = ?")
+        .run(JSON.stringify(saved), JSON.stringify(fieldsOf(k)), JSON.stringify(after), mergeId);
+      this.repo.delete(d.id);
+      this.repo.update(k.id, after);
+      return { k, d };
+    })();
+
+    // (until the journal row goes, recover() would finish these after a crash)
+    if (!outcome.d) {
+      // the copy being removed was deleted during the move: finish deleting it
+      await rm(this.storage.trashDirFor(drop.id), { recursive: true, force: true });
+      forgetMerge();
+      return outcome.k ?? null;
+    }
+    if (!outcome.k) {
+      // the keeper was deleted: the other copy stays
+      await this.moveFiles(drop, 'from-trash');
+      await rm(this.storage.trashDirFor(drop.id), { recursive: true, force: true });
+      forgetMerge();
+      return outcome.d;
     }
     this.log.info(`${drop.id} is a duplicate of ${keep.id}: kept ${keep.id} (${keep.original_name})`);
     return this.repo.get(keep.id)!;
@@ -245,25 +291,76 @@ export class Deduper {
         .filter((m): m is MergeRow => m?.state === 'active' && m.removed_row !== null)
         .sort((a, b) => b.id - a.id);
       const touched = new Set<string>();
+      let undone = 0;
       for (const m of merges) {
         const removed = JSON.parse(m.removed_row!) as MediaRow;
         if (this.repo.get(removed.id)) continue;
-        await this.moveFiles(removed, 'from-trash');
-        this.db.transaction(() => {
-          this.repo.restore({ ...removed, dedupe_pending: 0 });
-          const kept = this.repo.get(m.kept_id);
-          // only put the kept item back if nothing has changed it since
-          if (kept && sameFields(fieldsOf(kept), JSON.parse(m.kept_after) as MergeFields)) {
-            this.repo.update(kept.id, JSON.parse(m.kept_before) as MergeFields);
-          }
-          this.db.prepare("UPDATE merges SET state = 'undone', removed_row = NULL WHERE id = ?").run(m.id);
-        })();
-        await rm(this.storage.trashDirFor(removed.id), { recursive: true, force: true });
+        this.setState(m.id, 'restoring');
+        try {
+          await this.finishUndo(m);
+        } catch (err) {
+          await this.moveFiles(removed, 'to-trash').catch(() => undefined);
+          this.setState(m.id, 'active');
+          throw err;
+        }
+        undone++;
         touched.add(removed.id).add(m.kept_id);
       }
       const items = [...touched].map((id) => this.repo.get(id)).filter((r): r is MediaRow => !!r);
-      return { items, undone: merges.length };
+      return { items, undone };
     });
+  }
+
+  /** Put a removed copy back: files first (idempotent), then the row, in one transaction. */
+  private async finishUndo(m: MergeRow): Promise<void> {
+    const removed = JSON.parse(m.removed_row!) as MediaRow;
+    await this.moveFiles(removed, 'from-trash');
+    this.db.transaction(() => {
+      if (!this.repo.get(removed.id)) this.repo.restore({ ...removed, dedupe_pending: 0 });
+      const kept = this.repo.get(m.kept_id);
+      // only put the kept item back if nothing has changed it since
+      if (kept && sameFields(fieldsOf(kept), JSON.parse(m.kept_after) as MergeFields)) {
+        this.repo.update(kept.id, JSON.parse(m.kept_before) as MergeFields);
+      }
+      this.db.prepare("UPDATE merges SET state = 'undone', removed_row = NULL WHERE id = ?").run(m.id);
+    })();
+    await rm(this.storage.trashDirFor(removed.id), { recursive: true, force: true });
+  }
+
+  /**
+   * Finish what a crash interrupted, before the queue resumes: a merge still
+   * 'moving' is rolled back (its copy is still in the library), an undo still
+   * 'restoring' is completed.
+   */
+  async recover(): Promise<void> {
+    await this.exclusive(async () => {
+      const rows = this.db
+        .prepare("SELECT * FROM merges WHERE state IN ('moving', 'restoring') ORDER BY id DESC")
+        .all() as MergeRow[];
+      for (const m of rows) {
+        const removed = JSON.parse(m.removed_row!) as MediaRow;
+        try {
+          if (m.state === 'restoring') {
+            await this.finishUndo(m);
+          } else if (this.repo.get(removed.id)) {
+            await this.moveFiles(removed, 'from-trash');
+            await rm(this.storage.trashDirFor(removed.id), { recursive: true, force: true });
+            this.db.prepare('DELETE FROM merges WHERE id = ?').run(m.id);
+          } else {
+            // deleted while it was being moved
+            await rm(this.storage.trashDirFor(removed.id), { recursive: true, force: true });
+            this.db.prepare('DELETE FROM merges WHERE id = ?').run(m.id);
+          }
+          this.log.warn(`finished an interrupted ${m.state === 'restoring' ? 'undo' : 'merge'} of ${removed.id}`);
+        } catch (err) {
+          this.log.error(`could not recover merge ${m.id} (${removed.id}): ${(err as Error).message}`);
+        }
+      }
+    });
+  }
+
+  private setState(id: number, state: MergeRow['state']) {
+    this.db.prepare('UPDATE merges SET state = ? WHERE id = ?').run(state, id);
   }
 
   /** Merges the uploader's page should hear about. */
@@ -279,11 +376,13 @@ export class Deduper {
   /** Delete trashed copies older than TRASH_DAYS. */
   async purgeExpired(now = Date.now()): Promise<number> {
     const before = new Date(now - TRASH_DAYS * 86_400_000).toISOString();
-    const rows = this.db
-      .prepare("SELECT * FROM merges WHERE state = 'active' AND created_at < ?")
-      .all(before) as MergeRow[];
-    await this.exclusive(() => this.purge(rows));
-    return rows.length;
+    return this.exclusive(async () => {
+      const rows = this.db
+        .prepare("SELECT * FROM merges WHERE state = 'active' AND created_at < ?")
+        .all(before) as MergeRow[];
+      await this.purge(rows);
+      return rows.length;
+    });
   }
 
   /** An item was deleted: its hidden older copies go too. */
@@ -310,7 +409,7 @@ export class Deduper {
   private async purge(rows: MergeRow[]): Promise<void> {
     for (const m of rows) {
       await rm(this.storage.trashDirFor(m.removed_id), { recursive: true, force: true });
-      this.db.prepare("UPDATE merges SET state = 'purged', removed_row = NULL WHERE id = ?").run(m.id);
+      this.db.prepare("UPDATE merges SET state = 'purged', removed_row = NULL WHERE id = ? AND state = 'active'").run(m.id);
     }
   }
 
@@ -324,32 +423,32 @@ export class Deduper {
 
   /**
    * Move an item's original and derived files into trash/<id>/ (mirroring
-   * their paths) or back. Returns a function that reverses the move.
+   * their paths) or back. Idempotent, so an interrupted move can be re-run:
+   * a file already at its destination counts as moved.
    */
-  private async moveFiles(row: MediaRow, direction: 'to-trash' | 'from-trash'): Promise<() => Promise<void>> {
+  private async moveFiles(row: MediaRow, direction: 'to-trash' | 'from-trash'): Promise<void> {
     const trash = this.storage.trashDirFor(row.id);
     const pairs = [row.original_path, path.relative(this.storage.root, this.storage.derivedDirFor(row.id))].map(
-      (rel) => ({ live: this.storage.abs(rel), hidden: path.join(trash, rel) }),
+      (rel, i) => ({ live: this.storage.abs(rel), hidden: path.join(trash, rel), required: i === 0 }),
     );
-    const moved: { from: string; to: string }[] = [];
+    // a failure part-way leaves a partial move: callers roll back by moving the other way
     for (const p of pairs) {
       const [from, to] = direction === 'to-trash' ? [p.live, p.hidden] : [p.hidden, p.live];
-      await mkdir(path.dirname(to), { recursive: true });
-      try {
-        await rename(from, to);
-        moved.push({ from, to });
-      } catch (err) {
-        // no derived files yet is fine; a missing original is not
-        if ((err as NodeJS.ErrnoException).code !== 'ENOENT' || p.live.endsWith(row.original_path)) {
-          for (const m of moved.reverse()) await rename(m.to, m.from).catch(() => undefined);
-          throw err;
-        }
+      if (!(await exists(from))) {
+        // already moved, or (derived files) never made: only a missing original is an error
+        if (!p.required || (await exists(to))) continue;
+        throw new Error(`${row.original_path} is missing`);
       }
+      await mkdir(path.dirname(to), { recursive: true });
+      await rename(from, to);
     }
-    return async () => {
-      for (const m of moved.reverse()) await rename(m.to, m.from).catch(() => undefined);
-    };
   }
 }
+
+const exists = (p: string) =>
+  access(p).then(
+    () => true,
+    () => false,
+  );
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);

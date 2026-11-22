@@ -23,7 +23,8 @@ CREATE TABLE merges (
   kept_before TEXT NOT NULL,
   kept_after  TEXT NOT NULL,
   created_at  TEXT NOT NULL,
-  state       TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active', 'undone', 'purged'))
+  -- moving/restoring: files on their way to/from the trash; finished or rolled back at start-up
+  state       TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('moving', 'active', 'restoring', 'undone', 'purged'))
 );
 
 CREATE INDEX merges_kept ON merges (kept_id);

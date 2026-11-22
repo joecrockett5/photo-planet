@@ -50,6 +50,7 @@ export function buildApp(overrides: Partial<Config> = {}) {
     deduper.purgeExpired().catch((err: Error) => app.log.error(`purging old duplicates failed: ${err.message}`));
   let purgeTimer: NodeJS.Timeout | undefined;
   app.addHook('onReady', async () => {
+    await deduper.recover();
     queue.resume();
     void purge();
     purgeTimer = setInterval(() => void purge(), 6 * 3600_000).unref();

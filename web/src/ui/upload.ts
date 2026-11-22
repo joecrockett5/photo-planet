@@ -18,8 +18,6 @@ export class Uploader {
   private failed = 0;
   private busy = false;
   private added: MediaItem[] = [];
-  /** Everything uploaded from this page, to tell its duplicate merges from others'. */
-  private mine = new Set<string>();
   private lastError = '';
   private statusTimer: number | undefined;
   onBatchDone: ((added: MediaItem[]) => void) | null = null;
@@ -62,7 +60,7 @@ export class Uploader {
         store.upsert(result.item);
         if (!result.duplicate) {
           this.added.push(result.item);
-          this.mine.add(result.item.id);
+          store.uploadedHere(result.item.id);
         }
       } else {
         this.failed++;
@@ -85,11 +83,6 @@ export class Uploader {
     this.total = this.done = this.failed = 0;
     this.added = [];
     this.onBatchDone?.(added);
-  }
-
-  /** Whether this page uploaded the item. */
-  uploaded(id: string): boolean {
-    return this.mine.has(id);
   }
 
   private progress(units: number) {

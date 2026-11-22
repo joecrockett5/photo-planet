@@ -347,9 +347,7 @@ uploader.onBatchDone = (added) => {
 // one toast while it's showing.
 let mergeGroup: { merges: Merge[]; until: number } = { merges: [], until: 0 };
 const MERGE_TOAST_MS = 8000;
-store.onMerges = (merges) => {
-  const mine = merges.filter((m) => uploader.uploaded(m.uploadId));
-  if (!mine.length) return;
+store.onMerges = (mine) => {
   if (Date.now() > mergeGroup.until) mergeGroup = { merges: [], until: 0 };
   mergeGroup.merges.push(...mine);
   mergeGroup.until = Date.now() + MERGE_TOAST_MS;
