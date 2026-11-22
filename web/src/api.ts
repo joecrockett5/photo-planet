@@ -24,6 +24,16 @@ export interface MediaItem {
   originalUrl: string;
 }
 
+/** A copy removed as a duplicate of another (see the server's dedupe.ts). */
+export interface Merge {
+  id: number;
+  /** The new upload whose check found it: the kept or the removed copy. */
+  uploadId: string;
+  keptId: string;
+  removedId: string;
+  createdAt: string;
+}
+
 /** A town found by name. */
 export interface PlaceMatch {
   name: string;
@@ -62,7 +72,15 @@ async function json<T>(res: Response): Promise<T> {
 
 export const api = {
   config: () => fetch('/api/config').then((r) => json<AppConfig>(r)),
-  list: () => fetch('/api/media').then((r) => json<{ items: MediaItem[] }>(r)).then((r) => r.items),
+  /** Every item, and duplicates removed in the last few minutes. */
+  list: () => fetch('/api/media').then((r) => json<{ items: MediaItem[]; merges?: Merge[] }>(r)),
+  /** Bring back copies removed as duplicates. */
+  undoMerges: (ids: number[]) =>
+    fetch('/api/merges/undo', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }).then((r) => json<{ items: MediaItem[]; undone: number }>(r)),
   setLocation: (id: string, lat: number | null, lon: number | null) =>
     fetch(`/api/media/${id}`, {
       method: 'PATCH',

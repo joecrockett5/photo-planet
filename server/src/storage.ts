@@ -8,16 +8,19 @@ export class Storage {
   readonly originalsDir: string;
   readonly derivedDir: string;
   readonly tmpDir: string;
+  /** Copies removed as duplicates, kept for a while so the merge can be undone. */
+  readonly trashDir: string;
 
   constructor(readonly root: string) {
     this.dbFile = path.join(root, 'photo-planet.db');
     this.originalsDir = path.join(root, 'originals');
     this.derivedDir = path.join(root, 'derived');
     this.tmpDir = path.join(root, 'tmp');
+    this.trashDir = path.join(root, 'trash');
   }
 
   init(): void {
-    for (const dir of [this.root, this.originalsDir, this.derivedDir, this.tmpDir]) mkdirSync(dir, { recursive: true });
+    for (const dir of [this.root, this.originalsDir, this.derivedDir, this.tmpDir, this.trashDir]) mkdirSync(dir, { recursive: true });
   }
 
   /** Absolute path for a path stored relative to DATA_DIR. */
@@ -35,6 +38,10 @@ export class Storage {
 
   derivedDirFor(id: string): string {
     return path.join(this.derivedDir, id);
+  }
+
+  trashDirFor(id: string): string {
+    return path.join(this.trashDir, id);
   }
 
   async removeItemFiles(id: string, originalRel: string): Promise<void> {

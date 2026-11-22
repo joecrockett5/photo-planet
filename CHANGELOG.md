@@ -6,6 +6,18 @@ container image `ghcr.io/joecrockett5/photo-planet:<version>`.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-22
+
+### Added
+
+- **Near-duplicate detection.** Photos and videos are recognised by what they
+  look like, not their filename or bytes, so a WhatsApp copy (resized, metadata
+  stripped) and its original are the same item. Upload the original and it
+  replaces the copy; upload a copy of something already here and the better
+  file is kept. The merged item keeps the best location (from the file's
+  metadata over one placed by hand; the newer upload if both have one) and
+  any capture date. A toast offers undo; removed copies are kept for 30 days.
+
 ## [1.0.0] - 2026-11-06
 
 The first release.
@@ -35,5 +47,6 @@ The first release.
   photos, remembered per device; works as a phone home-screen app.
 - **One container** for linux/amd64 and linux/arm64, all state in one volume.
 
-[Unreleased]: https://github.com/joecrockett5/photo-planet/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/joecrockett5/photo-planet/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/joecrockett5/photo-planet/releases/tag/v1.1.0
 [1.0.0]: https://github.com/joecrockett5/photo-planet/releases/tag/v1.0.0

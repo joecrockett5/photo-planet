@@ -58,7 +58,10 @@ export class Uploader {
       this.progress(this.done);
       if (result.item) {
         store.upsert(result.item);
-        if (!result.duplicate) this.added.push(result.item);
+        if (!result.duplicate) {
+          this.added.push(result.item);
+          store.uploadedHere(result.item.id);
+        }
       } else {
         this.failed++;
         this.lastError = result.error ?? 'upload failed';

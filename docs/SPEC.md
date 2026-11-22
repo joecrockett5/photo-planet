@@ -148,7 +148,8 @@ server/   Fastify + TypeScript, SQLite (better-sqlite3), sharp, exifr, ffmpeg/ff
 /data     the only state (mount as a volume)
   ├─ photo-planet.db        SQLite database
   ├─ originals/<id>.<ext>   untouched uploads
-  └─ derived/<id>/…         thumbnails, display versions
+  ├─ derived/<id>/…         thumbnails, display versions
+  └─ trash/<id>/…           copies removed as duplicates (30 days, for undo)
 ```
 
 - The server serves the built frontend as static files, the JSON API under
@@ -163,7 +164,8 @@ server/   Fastify + TypeScript, SQLite (better-sqlite3), sharp, exifr, ffmpeg/ff
 | GET | `/api/config` | `{ title, authRequired, authenticated, maxUploadMb }` |
 | POST | `/api/login` | `{ password }` → sets cookie |
 | POST | `/api/logout` | clears the cookie |
-| GET | `/api/media` | all items (id, kind, lat, lon, takenAt, thumbUrl, status…) |
+| GET | `/api/media` | all items (id, kind, lat, lon, takenAt, thumbUrl, status…), plus `merges`: duplicates removed in the last 15 min |
+| POST | `/api/merges/undo` | `{ ids }` → brings removed duplicates back → `{ items, undone }` |
 | GET | `/api/media/:id` | one item |
 | POST | `/api/media` | multipart upload, one or more files → `{ results: [{ name, item?, duplicate?, error? }] }` |
 | PATCH | `/api/media/:id` | update `{ lat, lon }` |
@@ -265,6 +267,39 @@ deliberately differs. Revisit any of them freely.
   population; capitals get a floor) covers it, so the Eiffel Tower is "Paris",
   not a district, while Yokohama stays Yokohama; otherwise the nearest town
   within 25km; otherwise just the country.
+- **Near-duplicates** (`server/src/media/dedupe.ts`). Messaging apps
+  (WhatsApp especially) resize, recompress and strip metadata, so a shared copy
+  lands in the unplaced tray and the SHA-256 check can't match it to the
+  original. After the job queue makes an item's thumbnail it fingerprints it
+  (64-bit DCT pHash plus a 4×4 colour signature, `fingerprint.ts`) and, for
+  **new uploads only**, compares it with the library: same kind, same aspect
+  ratio (±1%, so small crops stay apart), hash and colour within `MATCH`
+  thresholds (photos: hash ≤ 6 bits, colour ≤ 4; measured on real photos,
+  copies stay within 4 / 2.2, unrelated pictures sit near 32 / 60 and
+  colour-graded or B&W edits at colour 10+, so edits stay apart); photos must
+  not disagree on capture time (to the sub-second when both have EXIF
+  `SubSecTimeOriginal`, so burst shots stay apart); videos (best-effort, one
+  poster frame) need the same duration (±0.25s/1%) and allow hash ≤ 8, as the
+  poster may land a few frames off. Nearly flat images (grey standard
+  deviation < 8: black frames, plain sky) aren't hashed, since their hash is
+  noise. Once a new upload has been dropped into an older item, each further
+  match must also match that item (an undated copy can't bridge two burst
+  shots). The check runs before the item is marked ready, so the status poll
+  sees the result.
+  On a match the **better file is kept**: more pixels (>5%), then the one with
+  metadata, then the newer upload. It takes the best **location**: from file
+  metadata > manual > none; for two of the same kind, the newer upload wins.
+  A missing date is filled in from the other copy. The other copy's files
+  move to `trash/<id>/` and its row into the `merges` table, so the uploader
+  gets a toast ("Replaced an older copy · undo"; several merges gather into
+  "Removed 3 duplicates") and undo puts everything back (the kept item's
+  fields only if nothing has changed them since). Undone pairs are never
+  merged again. Trash is purged after 30 days, or with the kept item when
+  it's deleted. A merge is journalled (`merges.state` `moving`, an undo
+  `restoring`) before files move and both rows are read again when it commits,
+  so a request in between (an edit, a delete) isn't lost, and start-up rolls
+  back an interrupted merge and finishes an interrupted undo. Items already in the library at upgrade are fingerprinted
+  in the background at start-up but never merged with each other.
 - **Duplicates.** Uploads are deduplicated by SHA-256; uploading the same
   file twice returns the existing item.
 - **Display versions** are made only when needed: HEIC → JPEG; MOV with

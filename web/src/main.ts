@@ -1,6 +1,6 @@
 import '@fontsource/silkscreen/400.css';
 import './style.css';
-import { api, auth, type MediaItem } from './api';
+import { api, auth, type MediaItem, type Merge } from './api';
 import { describeItems } from './format';
 import { motion } from './motion';
 import { unproject, type Cluster } from './planet/geo';
@@ -340,6 +340,37 @@ uploader.onBatchDone = (added) => {
   const last = placed[placed.length - 1];
   if (last && !gallery.isOpen) scene.control.flyTo(last.lat!, last.lon!);
 };
+
+// Duplicates the server found among this page's uploads (a WhatsApp copy
+// replaced by its original, or the other way round): say so, with an undo.
+// Merges arrive one by one as items finish processing, so they gather into
+// one toast while it's showing.
+let mergeGroup: { merges: Merge[]; until: number } = { merges: [], until: 0 };
+const MERGE_TOAST_MS = 8000;
+store.onMerges = (mine) => {
+  if (Date.now() > mergeGroup.until) mergeGroup = { merges: [], until: 0 };
+  mergeGroup.merges.push(...mine);
+  mergeGroup.until = Date.now() + MERGE_TOAST_MS;
+  const group = mergeGroup.merges;
+  const n = group.length;
+  const text =
+    n > 1
+      ? `Removed ${n} duplicates`
+      : group[0]!.keptId === group[0]!.uploadId
+        ? 'Replaced an older copy'
+        : 'Already here: kept the better copy';
+  toast.show(text, { label: 'undo', run: () => void undoMerges(group) }, MERGE_TOAST_MS);
+};
+
+async function undoMerges(merges: Merge[]) {
+  mergeGroup = { merges: [], until: 0 };
+  try {
+    await api.undoMerges(merges.map((m) => m.id));
+    await store.refresh();
+  } catch (err) {
+    toast.show(`Couldn't undo: ${(err as Error).message}`);
+  }
+}
 
 // ---------------------------------------------------------------- keys
 

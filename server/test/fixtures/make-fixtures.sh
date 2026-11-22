@@ -38,9 +38,9 @@ heif-enc -q 30 -o photo-tokyo.heic "$tmp/tokyo.jpg" >/dev/null
 exif -GPSLatitude=35.6586 -GPSLatitudeRef=N -GPSLongitude=139.7454 -GPSLongitudeRef=E \
   -DateTimeOriginal="2024:04:01 12:00:30" -OffsetTimeOriginal="+09:00" photo-tokyo.heic
 
-# JPEG with a date but no GPS (goes to the unplaced tray).
+# JPEG with a date (to the millisecond, like a phone's) but no GPS (goes to the unplaced tray).
 cp "$tmp/base.jpg" photo-no-gps.jpg
-exif -DateTimeOriginal="2018:08:08 08:08:08" photo-no-gps.jpg
+exif -DateTimeOriginal="2018:08:08 08:08:08" -SubSecTimeOriginal=250 photo-no-gps.jpg
 
 # iPhone-style MOV (H.264): QuickTime keys with ISO 6709 location and a local creation date.
 ffmpeg -loglevel error -y -f lavfi -i "testsrc=size=32x24:rate=5:duration=2" \

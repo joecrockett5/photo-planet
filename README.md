@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/joecrockett5/photo-planet/actions/workflows/ci.yml"><img src="https://github.com/joecrockett5/photo-planet/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <a href="https://github.com/joecrockett5/photo-planet/releases"><img src="https://img.shields.io/badge/version-1.0.0-5a6fd8" alt="Version 1.0.0"></a>
+  <a href="https://github.com/joecrockett5/photo-planet/releases"><img src="https://img.shields.io/badge/version-1.1.0-5a6fd8" alt="Version 1.1.0"></a>
   <a href="https://github.com/joecrockett5/photo-planet/pkgs/container/photo-planet"><img src="https://img.shields.io/badge/ghcr.io-photo--planet-2496ED?logo=docker&amp;logoColor=white" alt="Container image on ghcr.io"></a>
   <img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-555" alt="Platforms: amd64 and arm64">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3fa34d" alt="MIT License"></a>
@@ -47,7 +47,9 @@
   named offline: *"Osaka, Japan"*.
 - 📤 **Easy uploads.** The `+` button or drag and drop. JPEG, PNG, HEIC/HEIF,
   WebP, MP4, MOV and WebM. Originals are kept byte-for-byte; duplicates are
-  recognised.
+  recognised, even a WhatsApp copy with its metadata stripped: upload the
+  original later and it replaces the copy, keeping the best location (undo
+  for 30 days).
 - 🖼️ **Browse by place and day.** Tap a pin to fly there and open its photos;
   full-screen viewer with swipe, arrow keys and video playback.
 - 🗂️ **Unplaced tray.** Photos without a location wait there: drop them on the
@@ -130,7 +132,7 @@ docker compose up -d
 **3.** Open <http://localhost:8080>, log in, and press `+`.
 
 Check it's healthy with `curl http://localhost:8080/api/health`, which
-returns `{"ok":true,"version":"1.0.0"}`.
+returns `{"ok":true,"version":"1.1.0"}`.
 
 <details>
 <summary>Prefer plain <code>docker run</code>?</summary>
@@ -192,7 +194,8 @@ Everything is in the `photo-planet-data` volume, mounted at `/data`:
 /data
 ├─ photo-planet.db       SQLite database (locations, dates, etc.)
 ├─ originals/<id>.<ext>  your uploads, byte-for-byte untouched
-└─ derived/<id>/…        thumbnails and browser-friendly copies (re-creatable)
+├─ derived/<id>/…        thumbnails and browser-friendly copies (re-creatable)
+└─ trash/<id>/…          copies removed as duplicates, deleted after 30 days
 ```
 
 **Back it up** by copying that volume, for example:

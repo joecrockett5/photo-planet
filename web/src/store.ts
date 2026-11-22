@@ -1,4 +1,4 @@
-import { api, type MediaItem } from './api';
+import { api, type MediaItem, type Merge } from './api';
 
 type Listener = (items: MediaItem[]) => void;
 
@@ -7,6 +7,12 @@ class Store {
   items: MediaItem[] = [];
   loaded = false;
   private listeners = new Set<Listener>();
+  private seenMerges = new Set<number>();
+  private latestMerges: Merge[] = [];
+  /** Items uploaded from this page: only their duplicate merges are reported here. */
+  private mine = new Set<string>();
+  /** Called with duplicates the server removed among this page's uploads. */
+  onMerges: ((merges: Merge[]) => void) | null = null;
   private pollTimer: number | undefined;
 
   subscribe(fn: Listener): () => void {
@@ -24,9 +30,24 @@ class Store {
   }
 
   async refresh(): Promise<void> {
-    this.items = await api.list();
+    const { items, merges = [] } = await api.list();
+    this.items = items;
     this.loaded = true;
     this.emit();
+    this.latestMerges = merges;
+    this.reportMerges();
+  }
+
+  /** Note an upload from this page (its merge may already have been listed by a poll). */
+  uploadedHere(id: string): void {
+    this.mine.add(id);
+    this.reportMerges();
+  }
+
+  private reportMerges() {
+    const fresh = this.latestMerges.filter((m) => this.mine.has(m.uploadId) && !this.seenMerges.has(m.id));
+    for (const m of fresh) this.seenMerges.add(m.id);
+    if (fresh.length) this.onMerges?.(fresh);
   }
 
   /** Insert or replace items locally (e.g. right after an upload or edit). */
