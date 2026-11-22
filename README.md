@@ -47,7 +47,9 @@
   named offline: *"Osaka, Japan"*.
 - 📤 **Easy uploads.** The `+` button or drag and drop. JPEG, PNG, HEIC/HEIF,
   WebP, MP4, MOV and WebM. Originals are kept byte-for-byte; duplicates are
-  recognised.
+  recognised, even a WhatsApp copy with its metadata stripped: upload the
+  original later and it replaces the copy, keeping the best location (undo
+  for 30 days).
 - 🖼️ **Browse by place and day.** Tap a pin to fly there and open its photos;
   full-screen viewer with swipe, arrow keys and video playback.
 - 🗂️ **Unplaced tray.** Photos without a location wait there: drop them on the
@@ -192,7 +194,8 @@ Everything is in the `photo-planet-data` volume, mounted at `/data`:
 /data
 ├─ photo-planet.db       SQLite database (locations, dates, etc.)
 ├─ originals/<id>.<ext>  your uploads, byte-for-byte untouched
-└─ derived/<id>/…        thumbnails and browser-friendly copies (re-creatable)
+├─ derived/<id>/…        thumbnails and browser-friendly copies (re-creatable)
+└─ trash/<id>/…          copies removed as duplicates, deleted after 30 days
 ```
 
 **Back it up** by copying that volume, for example:

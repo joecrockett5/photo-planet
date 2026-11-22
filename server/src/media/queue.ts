@@ -1,6 +1,7 @@
 import { rm } from 'node:fs/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Storage } from '../storage.js';
+import type { Deduper } from './dedupe.js';
 import { deriveFiles, MissingToolError } from './derive.js';
 import type { MediaRepo } from './repo.js';
 
@@ -11,7 +12,7 @@ import type { MediaRepo } from './repo.js';
  * picked up again by `resume()`.
  */
 export class JobQueue {
-  private pending: string[] = [];
+  private pending: { id: string; job: 'derive' | 'fingerprint' }[] = [];
   private running: Promise<void> | null = null;
   private waiters: (() => void)[] = [];
   private stopped = false;
@@ -21,11 +22,12 @@ export class JobQueue {
     private repo: MediaRepo,
     private storage: Storage,
     private log: Pick<FastifyBaseLogger, 'info' | 'warn' | 'error'>,
+    private deduper?: Deduper,
   ) {}
 
-  enqueue(id: string): void {
+  enqueue(id: string, job: 'derive' | 'fingerprint' = 'derive'): void {
     if (this.stopped) return;
-    if (!this.pending.includes(id)) this.pending.push(id);
+    if (!this.pending.some((p) => p.id === id && p.job === job)) this.pending.push({ id, job });
     this.running ??= this.drain().finally(() => {
       this.running = null;
       for (const w of this.waiters.splice(0)) w();
@@ -37,6 +39,9 @@ export class JobQueue {
    * another go: a newer version or newly installed tool may handle them now.
    */
   resume(): void {
+    // items from before duplicate detection: fingerprint them first (quick:
+    // it reads the thumbnail) so new uploads can be compared with them
+    if (this.deduper) for (const id of this.repo.idsWithoutFingerprint()) this.enqueue(id, 'fingerprint');
     for (const id of this.repo.idsWithStatus('failed')) {
       this.repo.update(id, { status: 'processing' });
     }
@@ -61,8 +66,11 @@ export class JobQueue {
   }
 
   private async drain(): Promise<void> {
-    let id: string | undefined;
-    while ((id = this.pending.shift())) await this.process(id);
+    let next: (typeof this.pending)[number] | undefined;
+    while ((next = this.pending.shift())) {
+      if (next.job === 'derive') await this.process(next.id);
+      else await this.deduper?.fingerprint(next.id);
+    }
   }
 
   private async process(id: string): Promise<void> {
@@ -74,6 +82,11 @@ export class JobQueue {
     };
     try {
       await deriveFiles(row, this.storage, save, this.abort.signal);
+      if (this.deduper && !this.stopped) {
+        // before marking it ready, so a status poll never sees it ready but not yet merged
+        await this.deduper.fingerprint(id);
+        await this.deduper.check(id).catch((err: Error) => this.log.error(`duplicate check of ${id} failed: ${err.message}`));
+      }
       save({ status: 'ready', error: null });
       this.log.info(`processed ${id} (${row.kind}) in ${Date.now() - started}ms`);
     } catch (err) {

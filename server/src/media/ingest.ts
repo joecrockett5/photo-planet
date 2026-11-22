@@ -89,6 +89,7 @@ export async function ingest(
     lon: hasLocation ? meta.lon : null,
     location_source: hasLocation ? 'exif' : null,
     taken_at: meta.takenAt,
+    taken_subsec: meta.takenSubsec,
     uploaded_at: new Date().toISOString(),
     width: meta.width,
     height: meta.height,

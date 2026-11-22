@@ -25,6 +25,13 @@ export interface MediaRow {
   original_path: string;
   thumb_path: string | null;
   display_path: string | null;
+  /** Fingerprint of the thumbnail, for spotting re-encoded duplicates (see fingerprint.ts). */
+  phash: string | null;
+  color_sig: string | null;
+  /** EXIF sub-second capture time, e.g. "123". */
+  taken_subsec: string | null;
+  /** 1 until a new upload has been compared with the library. */
+  dedupe_pending: number;
 }
 
 /** What the API returns for an item. */

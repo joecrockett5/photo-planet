@@ -100,6 +100,8 @@ describe('derived files', () => {
       expect(row.status).toBe('ready');
       expect(row.display_path).toBeNull();
       expect(row.thumb_path).not.toBeNull();
+      // both are the same test pattern, so the second would be merged as a duplicate of the first
+      await app.inject({ method: 'DELETE', url: `/api/media/${row.id}` });
     }
   });
 

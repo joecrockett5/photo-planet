@@ -9,6 +9,7 @@ import { registerAuth } from './auth.js';
 import type { AppContext } from './context.js';
 import { openDb } from './db.js';
 import { Places } from './geo/places.js';
+import { Deduper } from './media/dedupe.js';
 import { extractMetadata } from './media/metadata.js';
 import { JobQueue } from './media/queue.js';
 import { MediaRepo } from './media/repo.js';
@@ -26,7 +27,11 @@ export function buildApp(overrides: Partial<Config> = {}) {
   storage.init();
   const db = openDb(storage.dbFile);
   const repo = new MediaRepo(db);
-  const queue = new JobQueue(repo, storage, app.log);
+  const deduper = new Deduper(db, repo, storage, app.log, async (row) => {
+    const meta = await extractMetadata(storage.abs(row.original_path), row.kind);
+    return meta.takenSubsec;
+  });
+  const queue = new JobQueue(repo, storage, app.log, deduper);
   const ctx: AppContext = {
     config,
     db,
@@ -34,18 +39,25 @@ export function buildApp(overrides: Partial<Config> = {}) {
     repo,
     extractMetadata,
     queue,
+    deduper,
     places: (() => {
       let loaded: Places | null = null;
       return () => (loaded ??= Places.load());
     })(),
     onIngested: (row) => queue.enqueue(row.id),
   };
+  const purge = () =>
+    deduper.purgeExpired().catch((err: Error) => app.log.error(`purging old duplicates failed: ${err.message}`));
+  let purgeTimer: NodeJS.Timeout | undefined;
   app.addHook('onReady', async () => {
     queue.resume();
+    void purge();
+    purgeTimer = setInterval(() => void purge(), 6 * 3600_000).unref();
     // warm the place-name index so the first page load isn't the one waiting
     if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) setImmediate(() => ctx.places());
   });
   app.addHook('onClose', async () => {
+    clearInterval(purgeTimer);
     await queue.stop();
     db.close();
   });

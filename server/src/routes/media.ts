@@ -7,7 +7,19 @@ export function mediaRoutes(app: FastifyInstance, ctx: AppContext): void {
   const { repo, storage } = ctx;
   const toItem = (row: MediaRow) => rowToItem(row, (lat, lon) => ctx.places().lookup(lat, lon));
 
-  app.get('/api/media', async () => ({ items: repo.list().map(toItem) }));
+  // `merges`: copies recently removed as duplicates, so the uploader's page can offer an undo.
+  app.get('/api/media', async () => ({ items: repo.list().map(toItem), merges: ctx.deduper.recent() }));
+
+  // Undo duplicate merges: the removed copies come back as they were.
+  app.post<{ Body: { ids?: unknown } }>('/api/merges/undo', async (req, reply) => {
+    const ids = req.body?.ids;
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 1000 || !ids.every((i) => Number.isInteger(i))) {
+      return reply.code(400).send({ error: 'ids must be a non-empty list of merge ids' });
+    }
+    const { items, undone } = await ctx.deduper.undo(ids as number[]);
+    if (undone === 0) return reply.code(404).send({ error: 'nothing to undo (it may have expired)' });
+    return { items: items.map(toItem), undone };
+  });
 
   app.get<{ Params: { id: string } }>('/api/media/:id', async (req, reply) => {
     const row = repo.get(req.params.id);
@@ -84,7 +96,10 @@ export function mediaRoutes(app: FastifyInstance, ctx: AppContext): void {
     ctx.db.transaction(() => {
       for (const row of rows) repo.delete(row!.id);
     })();
-    for (const row of rows) await storage.removeItemFiles(row!.id, row!.original_path);
+    for (const row of rows) {
+      await storage.removeItemFiles(row!.id, row!.original_path);
+      await ctx.deduper.forget(row!.id);
+    }
     return { deleted: rows.length };
   });
 
@@ -93,6 +108,7 @@ export function mediaRoutes(app: FastifyInstance, ctx: AppContext): void {
     if (!row) return reply.code(404).send({ error: 'not found' });
     repo.delete(row.id);
     await storage.removeItemFiles(row.id, row.original_path);
+    await ctx.deduper.forget(row.id);
     return reply.code(204).send();
   });
 

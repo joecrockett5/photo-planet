@@ -10,12 +10,22 @@ export interface Metadata {
   lon: number | null;
   /** ISO 8601. Includes an offset or `Z` when the file says so; otherwise local wall-clock time without one. */
   takenAt: string | null;
+  /** Sub-second part of the capture time (EXIF SubSecTimeOriginal), e.g. "123". Photos only. */
+  takenSubsec: string | null;
   width: number | null;
   height: number | null;
   duration: number | null;
 }
 
-export const EMPTY_METADATA: Metadata = { lat: null, lon: null, takenAt: null, width: null, height: null, duration: null };
+export const EMPTY_METADATA: Metadata = {
+  lat: null,
+  lon: null,
+  takenAt: null,
+  takenSubsec: null,
+  width: null,
+  height: null,
+  duration: null,
+};
 
 export async function extractMetadata(file: string, kind: Kind): Promise<Metadata> {
   try {
@@ -57,7 +67,8 @@ export async function photoMetadata(file: string): Promise<Metadata> {
     const block = await readExifBlock(file);
     if (block) data = ((await exifr.parse(block, EXIFR_OPTIONS).catch(() => undefined)) as ExifData) ?? data;
   }
-  return { ...EMPTY_METADATA, ...gpsFrom(data), takenAt: exifDate(data) };
+  const takenAt = exifDate(data);
+  return { ...EMPTY_METADATA, ...gpsFrom(data), takenAt, takenSubsec: takenAt ? exifSubsec(data) : null };
 }
 
 function hasUsefulExif(d: ExifData): boolean {
@@ -108,6 +119,13 @@ function exifDate(d: ExifData): string | null {
     if (iso) return iso;
   }
   return null;
+}
+
+/** Sub-seconds of whichever date `exifDate` used. */
+function exifSubsec(d: ExifData): string | null {
+  const value = parseExifDate(d?.DateTimeOriginal) ? d?.SubSecTimeOriginal : d?.SubSecTimeDigitized;
+  const digits = typeof value === 'string' || typeof value === 'number' ? /^\s*(\d{1,9})/.exec(String(value))?.[1] : undefined;
+  return digits ?? null;
 }
 
 /** `2023:06:14 18:32:05` (+ optional `+01:00`) → `2023-06-14T18:32:05+01:00`. */
@@ -182,6 +200,7 @@ export function metadataFromProbe(probe: Probe): Metadata {
     lat: point && validLatLon(point.lat, point.lon) ? point.lat : null,
     lon: point && validLatLon(point.lat, point.lon) ? point.lon : null,
     takenAt: videoDate(probe),
+    takenSubsec: null,
     width,
     height,
     duration: Number.isFinite(duration) && duration > 0 ? duration : null,

@@ -21,7 +21,7 @@ describe('photo metadata (fixtures)', () => {
 
   it('leaves location empty when there is no GPS', async () => {
     const meta = await extractMetadata(fixture('photo-no-gps.jpg'), 'photo');
-    expect(meta).toMatchObject({ lat: null, lon: null, takenAt: '2018-08-08T08:08:08' });
+    expect(meta).toMatchObject({ lat: null, lon: null, takenAt: '2018-08-08T08:08:08', takenSubsec: '250' });
   });
 
   it('does not throw on garbage', async () => {

@@ -6,6 +6,16 @@ container image `ghcr.io/joecrockett5/photo-planet:<version>`.
 
 ## [Unreleased]
 
+### Added
+
+- **Near-duplicate detection.** Photos and videos are recognised by what they
+  look like, not their filename or bytes, so a WhatsApp copy (resized, metadata
+  stripped) and its original are the same item. Upload the original and it
+  replaces the copy; upload a copy of something already here and the better
+  file is kept. The merged item keeps the best location (from the file's
+  metadata over one placed by hand; the newer upload if both have one) and
+  any capture date. A toast offers undo; removed copies are kept for 30 days.
+
 ## [1.0.0] - 2026-11-06
 
 The first release.
